@@ -21,18 +21,19 @@ df <- data.frame(entity = trimws(entities, "both"), stringsAsFactors = FALSE) %>
 df2 <- as.data.frame(strsplit(df[1,1], "\\},\\{")[[1]])
 
 # Prepare and structure data for final output
-df3 <- df2 %>%
-  pivot_longer(everything(), names_to = "Key", values_to = "Value") %>%
-  select(-Key) %>%
-  filter(grepl("^\"page_productName", Value)) %>%
-  separate(Value, into = paste0("col", 1:15), sep = '":"') 
-
-# Separate each column at every instance of '","'
-for (i in 1:ncol(df3)) {
-  col_name <- paste0("col", i)
-  df3 <- separate(df3, col = col_name, into = col_name, sep = '","')
-}
-
+suppressMessages({
+  df3 <- df2 %>%
+    pivot_longer(everything(), names_to = "Key", values_to = "Value") %>%
+    select(-Key) %>%
+    filter(grepl("^\"page_productName", Value)) %>%
+    separate(Value, into = paste0("col", 1:15), sep = '":"') 
+  
+  # Separate each column at every instance of '","'
+  for (i in 1:ncol(df3)) {
+    col_name <- paste0("col", i)
+    df3 <- separate(df3, col = col_name, into = col_name, sep = '","')
+  }
+})
 # Choose necessary columns, rename them, and prepare the final URLs
 df4 <- df3 %>%
   select(col3, col4, col7, col9) %>% 
@@ -85,10 +86,11 @@ ProductInformation <- function(URL_List_Products){
     df2ProductPageSelect <- NeededRow %>% 
       separate('BFG', into = paste0("col", 1:200), sep = ':', extra = "merge", remove = FALSE)  %>%
       select(where(~ any(. != "", na.rm = TRUE))) %>%
-      select(col42, col48, col52, col58, col70, col61, col62, col63, col64, col65, col66) %>% 
+      select(col27, col42, col48, col52, col58, col70, col61, col62, col63, col64, col65, col66) %>% 
       mutate(Specs = paste(col61, col62, col63, col64, col65, col66, collapse = "")) %>% 
-      select(col42, col48, col52, col58, col70, Specs) %>% 
+      select(col27, col42, col48, col52, col58, col70, Specs) %>% 
       rename(
+        ProductName = col27,
         ProductDetails = col42,
         AdditionalFeatures = col48,
         Construction = col52,
@@ -102,7 +104,7 @@ ProductInformation <- function(URL_List_Products){
     # Process transposed dataframe to clean up and reformat data
     df2ProductPageSelect_transposed <- df2ProductPageSelect_transposed %>%
       separate(col = V1, into = paste0("V", 1:100), sep = '","', remove = FALSE, convert = FALSE)
-    df2ProductPageSelect_transposed[] <- lapply(df2ProductPageSelect_transposed, function(x) gsub("[^A-Za-z0-9 .]", "", x))
+    df2ProductPageSelect_transposed[] <- lapply(df2ProductPageSelect_transposed, function(x) gsub("[^A-Za-z0-9 .-]", "", x))
     df2ProductPageSelect_transposed <- df2ProductPageSelect_transposed %>%
       select_if(function(col) any(col != "")) %>%
       mutate_all(~ ifelse(. == "productCopy", NA, .)) %>%
@@ -118,18 +120,33 @@ ProductInformation <- function(URL_List_Products){
     
     # Transpose again to get final product data frame
     FinalProductDF <- as.data.frame(t(df2ProductPageSelect_transposed))
+    # print(head(FinalProductDF))
     DF_To_Export <- bind_rows(DF_To_Export, FinalProductDF)
+    
     
   }
   
+  DF_To_Export <- DF_To_Export %>% 
+    mutate_all(~ str_replace(.x, "<br> isDormant", "")) %>%
+    filter(ProductDetails != "truedsplRsvLinkFlg ") %>%
+    mutate_all(~ str_replace(.x, "copy   ", "")) %>%
+    mutate(across(everything(), ~ifelse(grepl("isODSProduct", .), "", .)))
+  
+  
+    
   return(DF_To_Export)
 }  
   
 
 DF_To_Export <- ProductInformation(URL_List)
 
+write.csv(DF_To_Export, "DemoCSV_Bean_June2.csv")
 
 # Working: 
-URLProductPage <- URL_List[[1]]$NamesForURL[1]
-URLProductPage <- URL_List[[1]]$NamesForURL[2]
-URLProductPage <- URL_List[[1]]$NamesForURL[3]
+# URLProductPage <- URL_List[[1]]$NamesForURL[1]
+# URLProductPage <- URL_List[[1]]$NamesForURL[2]
+# URLProductPage <- URL_List[[1]]$NamesForURL[3]
+
+
+
+
