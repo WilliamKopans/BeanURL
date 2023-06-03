@@ -109,7 +109,67 @@ ProductInformation <- function(URL_List_Products){
         Construction = col52,
         FabricAndCare = col58,
         WhyWeLoveIt = col70
+      ) %>% 
+      mutate(PLink = as.character(URLProductPage))
+    
+    #
+    TempDF <- df2ProductPageSelect %>% 
+      filter(ProductDetails == "") %>%
+      mutate(
+        WhyWeLoveIt = "",
+        Specs = ""
       )
+    
+    Gapsdf2ProductPageSelect <- NeededRow %>% 
+      separate('BFG', into = paste0("col", 1:200), sep = ':', extra = "merge", remove = FALSE)  %>%
+      select(where(~ any(. != "", na.rm = TRUE))) %>%
+      select(col27, col42, col47, col52, col53, col57, col54, col58, col75, col61,col62,col63,col64,col65, col66, col70, col75, BFGTwo, col67,col68, col69, col70, col71) %>% 
+      # select(col27, col47, col49, col53, col57, col63, col75, col66,col67,col68,col60,col70,col71, BFGTwo) %>% 
+      mutate(Specs = paste(col67,col68, col69, col70, col71, collapse = "")) %>% 
+      select(BFGTwo, col27, col47, col53, col57, col63,col70, col75, Specs) %>% 
+      rename(
+        ProductDetails = col47,
+        ProductName = col27,
+        AdditionalFeatures = col53,
+        Construction = col57,
+        FabricAndCare = col63,
+        WhyWeLoveIt = col75
+      ) %>% 
+      mutate(PLink = as.character(URLProductPage)) %>% 
+      select("BFGTwo", "ProductName", "ProductDetails", "AdditionalFeatures", "Construction", "FabricAndCare", "WhyWeLoveIt", "Specs", "PLink")
+    
+    # df2ProductPageSelect <- df2ProductPageSelect %>% 
+    #   filter(ProductDetails != "")
+    # 
+    # Gapsdf2ProductPageSelect <-  Gapsdf2ProductPageSelect %>% 
+    #   bind_cols(Gapsdf2ProductPageSelect, df2ProductPageSelect)
+    
+    
+    #  print(data.frame(lapply(head(df2ProductPageSelect), function(x) substr(x, 1, 10))))
+    # print(df2ProductPageSelect$Construction)
+    if (nrow(TempDF) > 0 || any(grepl("premiseStatement", df2ProductPageSelect$Construction)) || any(grepl("\\{\"copy\"", df2ProductPageSelect$Construction))) {
+      print("Fixed Row")
+      df2ProductPageSelect <- Gapsdf2ProductPageSelect %>% 
+        mutate(changed = TRUE) 
+      # print(paste0("Revised: ", df2ProductPageSelect$Construction))
+      # print(data.frame(lapply(head(Gapsdf2ProductPageSelect), function(x) substr(x, 1, 10))))
+    }
+    # print("New:")
+    # print(substr(df2ProductPageSelect$Construction, 1, 5))
+    # cat("\n")
+    
+    df2ProductPageSelect <- df2ProductPageSelect %>% 
+      mutate_all(~ str_replace_all(.x, "componentDesc", "")) %>%
+      mutate_all(~ str_replace_all(.x, "specCopy", "")) %>% 
+      mutate_all(~ str_replace_all(.x, ".,", "")) %>%
+      mutate(WhyWeLoveIt = ifelse(grepl("Why We Love It,secondaryHeaderTxt      ", WhyWeLoveIt), "", WhyWeLoveIt))
+      # mutate(Specs = ifelse(startsWith(Specs, "Designed For"), Specs, "")) %>%
+      # mutate(Specs = ifelse(str_detect(Specs, "^Designed For"), Specs, ""))
+    
+    
+    
+    #
+    
     
     # Transpose df2ProductPageSelect
     df2ProductPageSelect_transposed <- as.data.frame(t(df2ProductPageSelect)) 
@@ -149,13 +209,33 @@ ProductInformation <- function(URL_List_Products){
     mutate(across(everything(), ~ifelse(grepl("rue,dsplRsvLinkFlg", .), "", .))) %>%
     mutate_all(~ str_replace(.x, "^\\s*<br>\\s*", "")) %>% 
     mutate_all(~ str_replace(.x, "premiseStatement", "")) %>% 
-    rename(Images = BFGTwo)
+    rename(Images = BFGTwo) %>%
+    mutate(Specs = str_trim(Specs)) %>%
+    mutate(Specs = if_else(grepl("^Designed", Specs), Specs, "")) %>% 
+    mutate(WhyWeLoveIt = if_else(!grepl("ItsecondaryHeaderTxt", WhyWeLoveIt), WhyWeLoveIt, "")) %>% 
+    mutate(FabricAndCare = if_else(!grepl("polyester.Cotton X-Pac", FabricAndCare), FabricAndCare, "")) %>% 
+    mutate(FabricAndCare = if_else(!grepl("denier nylon bottom", FabricAndCare), FabricAndCare, "")) %>% 
+    mutate(FabricAndCare = if_else(!grepl("Bluesign", FabricAndCare), FabricAndCare, ""))
   
-  
-    
   return(DF_To_Export)
 }  
   
+
+FixBrokenProducts <- function(PreviousDF){
+  TempDF <- PreviousDF %>% 
+    filter(ProductDetails == "") %>%
+    mutate(
+      WhyWeLoveIt = "",
+      Specs = ""
+    )
+} 
+
+  
+
+
+
+
+
 
 DF_To_Export <- ProductInformation(URL_List)
 
