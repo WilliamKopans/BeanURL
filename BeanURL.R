@@ -99,7 +99,7 @@ ProductInformation <- function(URL_List_Products){
     df2ProductPageSelect <- NeededRow %>% 
       separate('BFG', into = paste0("col", 1:200), sep = ':', extra = "merge", remove = FALSE)  %>%
       select(where(~ any(. != "", na.rm = TRUE))) %>%
-      select(BFGTwo, col27, col42, col48, col52, col58, col70, col61, col62, col63, col64, col65, col66) %>% 
+      select(BFGTwo, col27, col42, col48, col52, col58, col70, col61, col62, col63, col64, col65, col66) %>%
       mutate(Specs = paste(col61, col62, col63, col64, col65, col66, collapse = "")) %>% 
       select(BFGTwo, col27, col42, col48, col52, col58, col70, Specs) %>% 
       rename(
@@ -200,22 +200,33 @@ ProductInformation <- function(URL_List_Products){
   }
   
   DF_To_Export <- DF_To_Export %>%
+    filter(ProductDetails != "truedsplRsvLinkFlg ") %>%
     mutate_all(~ str_replace_all(.x, "\\[|\\]|\\{|\\}|\"", "")) %>% 
     mutate_all(~ str_replace(.x, "<br> isDormant", "")) %>%
-    filter(ProductDetails != "truedsplRsvLinkFlg ") %>%
     mutate_all(~ str_replace(.x, "copy   ", "")) %>%
     mutate_all(~ str_replace(.x, "copy", "")) %>%
+    mutate_all(~ str_replace(.x, "^\\s*<br>\\s*", "")) %>% 
+    mutate_all(~ str_replace(.x, "premiseStatement", "")) %>%
     mutate(across(everything(), ~ifelse(grepl("isODSProduct", .), "", .))) %>% 
     mutate(across(everything(), ~ifelse(grepl("rue,dsplRsvLinkFlg", .), "", .))) %>%
-    mutate_all(~ str_replace(.x, "^\\s*<br>\\s*", "")) %>% 
-    mutate_all(~ str_replace(.x, "premiseStatement", "")) %>% 
     rename(Images = BFGTwo) %>%
-    mutate(Specs = str_trim(Specs)) %>%
-    mutate(Specs = if_else(grepl("^Designed", Specs), Specs, "")) %>% 
-    mutate(WhyWeLoveIt = if_else(!grepl("ItsecondaryHeaderTxt", WhyWeLoveIt), WhyWeLoveIt, "")) %>% 
-    mutate(FabricAndCare = if_else(!grepl("polyester.Cotton X-Pac", FabricAndCare), FabricAndCare, "")) %>% 
-    mutate(FabricAndCare = if_else(!grepl("denier nylon bottom", FabricAndCare), FabricAndCare, "")) %>% 
-    mutate(FabricAndCare = if_else(!grepl("Bluesign", FabricAndCare), FabricAndCare, ""))
+    mutate(Specs = str_trim(Specs),
+           WhyWeLoveIt = if_else(!grepl("ItsecondaryHeaderTxt", WhyWeLoveIt), WhyWeLoveIt, ""),
+           FabricAndCare = if_else(!grepl("polyester.Cotton X-Pac", FabricAndCare), FabricAndCare, ""), # Will want to combine these and make it pretty later
+           FabricAndCare = if_else(!grepl("denier nylon bottom", FabricAndCare), FabricAndCare, ""),
+           FabricAndCare = if_else(!grepl("Bluesign", FabricAndCare), FabricAndCare, ""),
+           FabricAndCare = str_replace(FabricAndCare, ".Spot", ". Spot"),
+           Specs = str_replace(Specs, "up.Capacity", "up. Capacity"),
+           ProductName = str_replace(ProductName, "isDormant", ""),
+           Specs = str_replace_all(Specs, "\\\\", "\" "),
+           Specs = if_else(!str_detect(Specs, fixed("Designed For  Ages")), paste("Designed For: all ages. ", Specs), Specs),
+           Specs = if_else(!str_detect(Specs, fixed("  ")), paste("", Specs), Specs),
+           Specs = str_replace(Specs, "Designed For  Ages\\. ", "Designed For: Ages"),
+           Specs = str_replace_all(Specs, "  ", " "),
+           FabricAndCare = str_replace(FabricAndCare, "laundry ba then ", "laundry bag then "),
+           ProductDetails = str_replace(ProductDetails, "everyda everywhere", "everyday everywhere"),
+           Specs = str_replace(Specs, "Designed For Ages", "Designed For: ages")
+    )
   
   return(DF_To_Export)
 }  
@@ -245,6 +256,16 @@ write.csv(DF_To_Export, "DemoCSV_Bean_June2.csv")
 # URLProductPage <- URL_List[[1]]$NamesForURL[1]
 # URLProductPage <- URL_List[[1]]$NamesForURL[2]
 # URLProductPage <- URL_List[[1]]$NamesForURL[3]
+
+
+
+# Weird things like no why we love it: https://www.llbean.com/llb/shop/125522?page=mountain-classic-school-backpack
+  
+  
+
+
+
+
 
 
 
