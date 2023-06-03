@@ -59,6 +59,7 @@ ProductInformation <- function(URL_List_Products){
   for (link in URL_List_Products){
     
     URLProductPage <- link
+    print(URLProductPage)
     
     # Retrieve webpage content from URL
     responseProductPage <- content(GET(URLProductPage), as = "text")
@@ -74,9 +75,17 @@ ProductInformation <- function(URL_List_Products){
     df2ProductPage <- as.data.frame(strsplit(dfProductPage[1,1], "\\},\\{")[[1]])
     
     # Process and select specific columns from 942nd row of df2ProductPage
-    df2ProductPageSelect <- as.data.frame(df2ProductPage[942,]) %>% 
-      separate('df2ProductPage[942, ]', into = paste0("col", 1:200), sep = ':', extra = "merge", remove = FALSE)  %>%
+    testdf <- df2ProductPage
+    names(testdf) <- "BFG"
+    NeededRow <- as.data.frame(testdf[grepl("rel\":\"alternate\",\"href", testdf$BFG), ])
+    names(NeededRow) <- "BFG"
+    
+    
+    
+    df2ProductPageSelect <- NeededRow %>% 
+      separate('BFG', into = paste0("col", 1:200), sep = ':', extra = "merge", remove = FALSE)  %>%
       select(where(~ any(. != "", na.rm = TRUE))) %>%
+      select(col42, col48, col52, col58, col70, col61, col62, col63, col64, col65, col66) %>% 
       mutate(Specs = paste(col61, col62, col63, col64, col65, col66, collapse = "")) %>% 
       select(col42, col48, col52, col58, col70, Specs) %>% 
       rename(
@@ -113,67 +122,14 @@ ProductInformation <- function(URL_List_Products){
     
   }
   
-  
+  return(DF_To_Export)
 }  
   
 
-ProductInformation(URL_List)
+DF_To_Export <- ProductInformation(URL_List)
 
 
-# 
-# URLProductPage <- URL_List[[1]]$NamesForURL[1]
-# 
-# # Retrieve webpage content from URL
-# responseProductPage <- content(GET(URLProductPage), as = "text")
-# 
-# # Extract all text nodes from the HTML content
-# entitiesProductPage <- html_nodes(read_html(responseProductPage), xpath = "//*/text()")
-# 
-# # Clean and transform the data into a structured data frame
-# dfProductPage <- data.frame(entity = trimws(entitiesProductPage, "both"), stringsAsFactors = FALSE) %>%
-#   filter(entity != "") %>%
-#   filter(startsWith(entity, "window.__INITIAL_STATE_"))
-# # Split first row of dfProductPage and convert to data frame
-# df2ProductPage <- as.data.frame(strsplit(dfProductPage[1,1], "\\},\\{")[[1]])
-# 
-# # Process and select specific columns from 942nd row of df2ProductPage
-# df2ProductPageSelect <- as.data.frame(df2ProductPage[942,]) %>% 
-#   separate('df2ProductPage[942, ]', into = paste0("col", 1:200), sep = ':', extra = "merge", remove = FALSE)  %>%
-#   select(where(~ any(. != "", na.rm = TRUE))) %>%
-#   mutate(Specs = paste(col61, col62, col63, col64, col65, col66, collapse = "")) %>% 
-#   select(col42, col48, col52, col58, col70, Specs) %>% 
-#   rename(
-#     ProductDetails = col42,
-#     AdditionalFeatures = col48,
-#     Construction = col52,
-#     FabricAndCare = col58,
-#     WhyWeLoveIt = col70
-#   )
-# 
-# # Transpose df2ProductPageSelect
-# df2ProductPageSelect_transposed <- as.data.frame(t(df2ProductPageSelect)) 
-# 
-# # Process transposed dataframe to clean up and reformat data
-# df2ProductPageSelect_transposed <- df2ProductPageSelect_transposed %>%
-#   separate(col = V1, into = paste0("V", 1:100), sep = '","', remove = FALSE, convert = FALSE)
-# df2ProductPageSelect_transposed[] <- lapply(df2ProductPageSelect_transposed, function(x) gsub("[^A-Za-z0-9 .]", "", x))
-# df2ProductPageSelect_transposed <- df2ProductPageSelect_transposed %>%
-#   select_if(function(col) any(col != "")) %>%
-#   mutate_all(~ ifelse(. == "productCopy", NA, .)) %>%
-#   mutate_all(~ str_replace(.x, "constructionHeadline", "")) %>%
-#   mutate_all(~ str_replace(.x, "specsHeadline", "")) %>%
-#   mutate_all(~ str_replace(.x, "additionalFeaturesHeadline", "")) %>%
-#   mutate_all(~ str_replace(.x, "specs", "")) %>%
-#   mutate_all(~ str_replace(.x, "Dimensions ", "")) %>%
-#   unite(combined_column, everything(), sep = " <br> ") %>%
-#   mutate_all(~ str_replace_all(.x, "<br> NA", "")) %>%
-#   mutate_all(~ str_replace(.x, "^ <br>  ", "")) %>%
-#   mutate_all(~ str_replace(.x, " NA$", ""))
-# 
-# # Transpose again to get final product data frame
-# FinalProductDF <- as.data.frame(t(df2ProductPageSelect_transposed))
-# 
-
-
-
-
+# Working: 
+URLProductPage <- URL_List[[1]]$NamesForURL[1]
+URLProductPage <- URL_List[[1]]$NamesForURL[2]
+URLProductPage <- URL_List[[1]]$NamesForURL[3]
