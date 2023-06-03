@@ -1,4 +1,4 @@
-
+# Need to add price and add checks for columns such as WhyWeLoveIt, FabricAndCare, and Specs not to be mixed up
 library(tidyverse)
 library(rvest)
 library(httr)
@@ -79,16 +79,29 @@ ProductInformation <- function(URL_List_Products){
     testdf <- df2ProductPage
     names(testdf) <- "BFG"
     NeededRow <- as.data.frame(testdf[grepl("rel\":\"alternate\",\"href", testdf$BFG), ])
-    names(NeededRow) <- "BFG"
+    NeededRow$BFGTwo <- as.data.frame(testdf[grepl("\"property\":\"og:image", testdf$BFG), ])
+    
+    names <- colnames(NeededRow)
+    names[1] <- "BFG"
+    names[2] <- "BFGTwo"
+    colnames(NeededRow) <- names
+    
+    names(NeededRow)[1] <- "BFG"
+    names(NeededRow)[2] <- "BFGTwo"
+    
+    text <- as.character(NeededRow$BFGTwo)
+    regex_pattern <- "\"content\":\"(.*?)\""
+    match <- str_match(text, regex_pattern)
+    NeededRow$BFGTwo[1] <- match[2]
     
     
     
     df2ProductPageSelect <- NeededRow %>% 
       separate('BFG', into = paste0("col", 1:200), sep = ':', extra = "merge", remove = FALSE)  %>%
       select(where(~ any(. != "", na.rm = TRUE))) %>%
-      select(col27, col42, col48, col52, col58, col70, col61, col62, col63, col64, col65, col66) %>% 
+      select(BFGTwo, col27, col42, col48, col52, col58, col70, col61, col62, col63, col64, col65, col66) %>% 
       mutate(Specs = paste(col61, col62, col63, col64, col65, col66, collapse = "")) %>% 
-      select(col27, col42, col48, col52, col58, col70, Specs) %>% 
+      select(BFGTwo, col27, col42, col48, col52, col58, col70, Specs) %>% 
       rename(
         ProductName = col27,
         ProductDetails = col42,
@@ -104,7 +117,7 @@ ProductInformation <- function(URL_List_Products){
     # Process transposed dataframe to clean up and reformat data
     df2ProductPageSelect_transposed <- df2ProductPageSelect_transposed %>%
       separate(col = V1, into = paste0("V", 1:100), sep = '","', remove = FALSE, convert = FALSE)
-    df2ProductPageSelect_transposed[] <- lapply(df2ProductPageSelect_transposed, function(x) gsub("[^A-Za-z0-9 .-]", "", x))
+    # df2ProductPageSelect_transposed[] <- lapply(df2ProductPageSelect_transposed, function(x) gsub("[^A-Za-z0-9 .%-]", "", x))
     df2ProductPageSelect_transposed <- df2ProductPageSelect_transposed %>%
       select_if(function(col) any(col != "")) %>%
       mutate_all(~ ifelse(. == "productCopy", NA, .)) %>%
@@ -126,11 +139,17 @@ ProductInformation <- function(URL_List_Products){
     
   }
   
-  DF_To_Export <- DF_To_Export %>% 
+  DF_To_Export <- DF_To_Export %>%
+    mutate_all(~ str_replace_all(.x, "\\[|\\]|\\{|\\}|\"", "")) %>% 
     mutate_all(~ str_replace(.x, "<br> isDormant", "")) %>%
     filter(ProductDetails != "truedsplRsvLinkFlg ") %>%
     mutate_all(~ str_replace(.x, "copy   ", "")) %>%
-    mutate(across(everything(), ~ifelse(grepl("isODSProduct", .), "", .)))
+    mutate_all(~ str_replace(.x, "copy", "")) %>%
+    mutate(across(everything(), ~ifelse(grepl("isODSProduct", .), "", .))) %>% 
+    mutate(across(everything(), ~ifelse(grepl("rue,dsplRsvLinkFlg", .), "", .))) %>%
+    mutate_all(~ str_replace(.x, "^\\s*<br>\\s*", "")) %>% 
+    mutate_all(~ str_replace(.x, "premiseStatement", "")) %>% 
+    rename(Images = BFGTwo)
   
   
     
