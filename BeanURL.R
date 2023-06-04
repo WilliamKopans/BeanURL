@@ -148,7 +148,7 @@ ProductInformation <- function(URL_List_Products){
     #  print(data.frame(lapply(head(df2ProductPageSelect), function(x) substr(x, 1, 10))))
     # print(df2ProductPageSelect$Construction)
     if (nrow(TempDF) > 0 || any(grepl("premiseStatement", df2ProductPageSelect$Construction)) || any(grepl("\\{\"copy\"", df2ProductPageSelect$Construction))) {
-      print("Fixed Row")
+      print("Extraction Method Two Used")
       df2ProductPageSelect <- Gapsdf2ProductPageSelect %>% 
         mutate(changed = TRUE) 
       # print(paste0("Revised: ", df2ProductPageSelect$Construction))
@@ -191,8 +191,77 @@ ProductInformation <- function(URL_List_Products){
       mutate_all(~ str_replace(.x, "^ <br>  ", "")) %>%
       mutate_all(~ str_replace(.x, " NA$", ""))
     
+    
+    FixLoveAndCare <- as.data.frame(t(df2ProductPageSelect_transposed)) %>%
+      mutate(FabricAndCare = ifelse(FabricAndCare == '["Spot clean."]""',
+                                    str_replace_all(FabricAndCare, '\\["Spot clean."\\]""', 'Spot clean.'),
+                                    FabricAndCare)) %>% 
+      filter(WhyWeLoveIt == "{\"copy\"") %>% 
+      mutate(NeededRow$BFG) %>%
+      rename(BFG = 'NeededRow$BFG') %>% 
+      mutate(BFG = str_remove(BFG, ".*whyWeLoveItDesc"),
+             BFG = str_replace(BFG, '\\:\\{"copy":\\["', ""),
+             WhyWeLoveIt = str_extract(BFG, '"([^"]+)"')) %>% 
+      select(-BFG)
+    
+    TestFixNeeded <- as.data.frame(t(df2ProductPageSelect_transposed)) %>%
+      filter(WhyWeLoveIt == "{\"copy\"")
+    
+    EdgeCaseTest <- as.data.frame(t(df2ProductPageSelect_transposed)) %>%  # Not sure why the route cause of why I need this...
+      mutate(FabricAndCare = ifelse(FabricAndCare == '["Spot clean."]""',
+                                    str_replace_all(FabricAndCare, '\\["Spot clean."\\]""', 'Spot clean.'),
+                                    FabricAndCare)) %>% 
+      filter(WhyWeLoveIt == '["Why We Love It"]}}"secondaryHeaderTxt"') %>% 
+      mutate(NeededRow$BFG) %>%
+      rename(BFG = 'NeededRow$BFG') %>% 
+      mutate(BFG = str_remove(BFG, ".*whyWeLoveItDesc"),
+             BFG = str_replace(BFG, '\\:\\{"copy":\\["', ""),
+             WhyWeLoveIt = str_extract(BFG, '"([^"]+)"')) %>% 
+      select(-BFG)
+    
+    EdgeCaseTestSecond <- as.data.frame(t(df2ProductPageSelect_transposed)) %>%  # Not sure why the route cause of why I need this...
+      mutate(FabricAndCare = ifelse(FabricAndCare == '["Spot clean."]""',
+                                    str_replace_all(FabricAndCare, '\\["Spot clean."\\]""', 'Spot clean.'),
+                                    FabricAndCare)) %>% 
+      filter(WhyWeLoveIt == '["Why We Love It"]}}"secondaryHeaderTxt"') %>% 
+      mutate(NeededRow$BFG) %>%
+      rename(BFG = 'NeededRow$BFG') %>% 
+      mutate(BFG = str_remove(BFG, ".*fabricContentBullet"),
+             BFG = str_replace(BFG, '\\:\\{"copy":\\["', ""),
+             FabricAndCare = str_extract(BFG, '"([^"]+)"'),
+             WhyWeLoveIt = "") %>% 
+      select(-BFG)
+    
+    
+    
+    
+    
     # Transpose again to get final product data frame
     FinalProductDF <- as.data.frame(t(df2ProductPageSelect_transposed))
+    if (nrow(TestFixNeeded) > 0){
+      print("Fixed Love & Care")
+      FinalProductDF <- FixLoveAndCare
+    }
+    if (nrow(EdgeCaseTest) > 0){
+      print("Fixed Edge Case")
+      FinalProductDF <- EdgeCaseTest
+      
+      if (grepl("Drawstring", EdgeCaseTest$ProductName)) {
+        FinalProductDF <- EdgeCaseTestSecond
+      }
+      
+    }
+    if (any(grepl("isODSProduct", FinalProductDF$WhyWeLoveIt))) {
+      FinalProductDF <- as.data.frame(t(df2ProductPageSelect_transposed)) %>%
+        mutate(FabricAndCare = ifelse(FabricAndCare == '["Spot clean."]""',
+                                      str_replace_all(FabricAndCare, '\\["Spot clean."\\]""', 'Spot clean.'),
+                                      FabricAndCare)) %>% 
+        mutate(WhyWeLoveIt = "")
+    }
+    
+    
+    
+    
     # print(head(FinalProductDF))
     DF_To_Export <- bind_rows(DF_To_Export, FinalProductDF)
     
@@ -226,9 +295,23 @@ ProductInformation <- function(URL_List_Products){
            FabricAndCare = str_replace(FabricAndCare, "laundry ba then ", "laundry bag then "),
            ProductDetails = str_replace(ProductDetails, "everyda everywhere", "everyday everywhere"),
            Specs = str_replace(Specs, "Designed For Ages", "Designed For: ages")
-    )
+    ) 
   
-  return(DF_To_Export)
+  if (any(grepl("Mountain Classic School", DF_To_Export$ProductName))) { # Unfortunately need to hard code this one, can't crack this nut!
+    print("Mountain School")
+    if (any(DF_To_Export$FabricAndCare == "")) {
+      print("Mountain School 2")
+         DF_To_Export <- DF_To_Export %>%
+           mutate(NeededRow$BFG) %>%
+           rename(BFG = 'NeededRow$BFG') %>%
+           mutate(BFG = str_remove(BFG, ".*fabricContentBullet"),
+                  BFG = str_replace(BFG, '\\:\\{"copy":\\["', ""),
+                  FabricAndCare = str_extract(BFG, '"([^"]+)"'),) %>%
+           select(-BFG)
+       }
+       
+       return(DF_To_Export)
+    }
 }  
   
 
@@ -250,7 +333,10 @@ FixBrokenProducts <- function(PreviousDF){
 
 DF_To_Export <- ProductInformation(URL_List)
 
-write.csv(DF_To_Export, "DemoCSV_Bean_June2.csv")
+write.csv(DF_To_Export, "DemoCSV_Bean_June3.csv")
+
+# Testing An Error:
+DemoF_To_Export <- DF_To_Export %>% filter(WhyWeLoveIt == "")
 
 # Working: 
 # URLProductPage <- URL_List[[1]]$NamesForURL[1]
