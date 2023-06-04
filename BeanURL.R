@@ -6,50 +6,48 @@ library(httr)
 URL <- "https://www.llbean.com/llb/shop/816?page=school-backpacks-and-lunch-boxes"
 URL <- "https://www.llbean.com/llb/shop/818?page=school-backpacks&csp=f&bc=50-816&start=1&viewCount=48&nav=ln-816"
 
-# Retrieve webpage content from URL
-response <- content(GET(URL), as = "text")
-
-# Extract all text nodes from the HTML content
-entities <- html_nodes(read_html(response), xpath = "//*/text()")
-
-# Clean and transform the data into a structured data frame
-df <- data.frame(entity = trimws(entities, "both"), stringsAsFactors = FALSE) %>%
-  filter(entity != "") %>%
-  filter(startsWith(entity, "window.__INITIAL_STATE_"))
-
-# Split the data
-df2 <- as.data.frame(strsplit(df[1,1], "\\},\\{")[[1]])
-
-# Prepare and structure data for final output
-suppressMessages({
-  df3 <- df2 %>%
-    pivot_longer(everything(), names_to = "Key", values_to = "Value") %>%
-    select(-Key) %>%
-    filter(grepl("^\"page_productName", Value)) %>%
-    separate(Value, into = paste0("col", 1:15), sep = '":"') 
-  
-  # Separate each column at every instance of '","'
-  for (i in 1:ncol(df3)) {
-    col_name <- paste0("col", i)
-    df3 <- separate(df3, col = col_name, into = col_name, sep = '","')
-  }
-})
-# Choose necessary columns, rename them, and prepare the final URLs
-df4 <- df3 %>%
-  select(col3, col4, col7, col9) %>% 
-  rename(NamesForURL = col3,
-         SomeTag = col4,
-         NamesReadable = col7,
-         InternalIDs = col9) %>% 
-  mutate(NamesForURL = paste0("https://www.llbean.com/llb/shop/",SomeTag,"?page=", NamesForURL))
-
-URL_List <- list(df4[,1])
-
-for (link in URL_List) {
-  print(link)
+ExtractBackpacks <- function(URL_Of_Category){
+    
+    # Retrieve webpage content from URL
+    response <- content(GET(URL), as = "text")
+    
+    # Extract all text nodes from the HTML content
+    entities <- html_nodes(read_html(response), xpath = "//*/text()")
+    
+    # Clean and transform the data into a structured data frame
+    df <- data.frame(entity = trimws(entities, "both"), stringsAsFactors = FALSE) %>%
+      filter(entity != "") %>%
+      filter(startsWith(entity, "window.__INITIAL_STATE_"))
+    
+    # Split the data
+    df2 <- as.data.frame(strsplit(df[1,1], "\\},\\{")[[1]])
+    
+    # Prepare and structure data for final output
+    suppressMessages({
+      df3 <- df2 %>%
+        pivot_longer(everything(), names_to = "Key", values_to = "Value") %>%
+        select(-Key) %>%
+        filter(grepl("^\"page_productName", Value)) %>%
+        separate(Value, into = paste0("col", 1:15), sep = '":"') 
+      
+      # Separate each column at every instance of '","'
+      for (i in 1:ncol(df3)) {
+        col_name <- paste0("col", i)
+        df3 <- separate(df3, col = col_name, into = col_name, sep = '","')
+      }
+    })
+    # Choose necessary columns, rename them, and prepare the final URLs
+    df4 <- df3 %>%
+      select(col3, col4, col7, col9) %>% 
+      rename(NamesForURL = col3,
+             SomeTag = col4,
+             NamesReadable = col7,
+             InternalIDs = col9) %>% 
+      mutate(NamesForURL = paste0("https://www.llbean.com/llb/shop/",SomeTag,"?page=", NamesForURL))
+    
+    URL_List <- list(df4[,1])
+    return(URL_List)
 }
-
-
 
 ProductInformation <- function(URL_List_Products){
   
@@ -93,7 +91,6 @@ ProductInformation <- function(URL_List_Products){
     regex_pattern <- "\"content\":\"(.*?)\""
     match <- str_match(text, regex_pattern)
     NeededRow$BFGTwo[1] <- match[2]
-    
     
     
     df2ProductPageSelect <- NeededRow %>% 
@@ -163,8 +160,8 @@ ProductInformation <- function(URL_List_Products){
       mutate_all(~ str_replace_all(.x, "specCopy", "")) %>% 
       mutate_all(~ str_replace_all(.x, ".,", "")) %>%
       mutate(WhyWeLoveIt = ifelse(grepl("Why We Love It,secondaryHeaderTxt      ", WhyWeLoveIt), "", WhyWeLoveIt))
-      # mutate(Specs = ifelse(startsWith(Specs, "Designed For"), Specs, "")) %>%
-      # mutate(Specs = ifelse(str_detect(Specs, "^Designed For"), Specs, ""))
+    # mutate(Specs = ifelse(startsWith(Specs, "Designed For"), Specs, "")) %>%
+    # mutate(Specs = ifelse(str_detect(Specs, "^Designed For"), Specs, ""))
     
     
     
@@ -259,7 +256,58 @@ ProductInformation <- function(URL_List_Products){
         mutate(WhyWeLoveIt = "")
     }
     
+    if (any(grepl("Mountain Classic School", FinalProductDF$ProductName))) { # Unfortunately need to hard code this one, can't crack this nut!
+      print("Hardcoded: Mountain School")
+        FinalProductDF <- FinalProductDF %>%
+          mutate(NeededRow$BFG) %>%
+          rename(BFG = 'NeededRow$BFG') %>%
+          mutate(BFG = str_remove(BFG, ".*fabricContentBullet"),
+                 BFG = str_replace(BFG, '\\:\\{"copy":\\["', ""),
+                 FabricAndCare = str_extract(BFG, '"([^"]+)"'),) %>%
+          select(-BFG)
+    }
     
+    
+    FinalProductDF <- FinalProductDF %>% 
+      mutate(NeededRow$BFG) %>%
+      rename(Price = 'NeededRow$BFG') %>% 
+      mutate(Price = str_remove(Price, ".*prices")) %>%
+      mutate(Price = str_remove(Price, ".*?:")) %>%
+      mutate(Price = sub(".*?:", "", Price)) %>% 
+      mutate(Price = str_extract(Price, "^[^,]+")) %>%
+      mutate(Price = ifelse(grepl("bean", Price), NA, Price))
+    
+    
+    PriceTwo <- as.data.frame(testdf[grepl('\"default\":false,\"id\":\"', testdf$BFG), ]) %>%
+      filter(grepl("price", `testdf[grepl(\"\\\"default\\\":false,\\\"id\\\":\\\"\", testdf$BFG), ]`)) %>% 
+      rename(Price = `testdf[grepl(\"\\\"default\\\":false,\\\"id\\\":\\\"\", testdf$BFG), ]`) %>%
+      mutate(Price = str_remove(Price, ".*fullPrice")) %>%
+      mutate(Price = str_remove(Price, ".*?:"))%>%
+      mutate(Price = gsub("potentialDiscounts.*", "", Price)) %>%
+      separate(Price, into = c("regular", "sale"), sep = "salePrice") %>%
+      mutate(regular = str_replace_all(regular, "[^0-9.]", ""),
+             sale = str_replace_all(sale, "[^0-9.]", "")) %>%
+      mutate(regular = as.numeric(regular),
+             sale = as.numeric(sale)) %>%
+      mutate(PriceLowest = ifelse(is.na(regular), sale,
+                               ifelse(is.na(sale), regular,
+                                      pmin(regular, sale, na.rm = TRUE)))) %>% 
+      select(PriceLowest)
+    DeterminedPrice = PriceTwo[1,1]
+    print(DeterminedPrice)
+    
+    
+    
+    SP_FinalProductDF <- FinalProductDF %>% 
+      mutate(Price = str_remove(Price, ".*prices")) %>%
+      mutate(Price = str_remove(Price, ".*?:")) %>%
+      mutate(Price = sub(".*?:", "", Price)) %>% 
+      mutate(Price = str_extract(Price, "^[^,]+")) %>%
+      mutate(Price = ifelse(grepl("bean", Price), NA, Price)) %>% 
+      mutate(Price = ifelse(is.na(Price), DeterminedPrice, Price))
+      
+    FinalProductDF <- FinalProductDF %>% 
+      mutate(Price = DeterminedPrice)
     
     
     # print(head(FinalProductDF))
@@ -295,36 +343,16 @@ ProductInformation <- function(URL_List_Products){
            FabricAndCare = str_replace(FabricAndCare, "laundry ba then ", "laundry bag then "),
            ProductDetails = str_replace(ProductDetails, "everyda everywhere", "everyday everywhere"),
            Specs = str_replace(Specs, "Designed For Ages", "Designed For: ages")
-    ) 
+    ) %>% 
+    select(-changed)
   
-  if (any(grepl("Mountain Classic School", DF_To_Export$ProductName))) { # Unfortunately need to hard code this one, can't crack this nut!
-    print("Mountain School")
-    if (any(DF_To_Export$FabricAndCare == "")) {
-      print("Mountain School 2")
-         DF_To_Export <- DF_To_Export %>%
-           mutate(NeededRow$BFG) %>%
-           rename(BFG = 'NeededRow$BFG') %>%
-           mutate(BFG = str_remove(BFG, ".*fabricContentBullet"),
-                  BFG = str_replace(BFG, '\\:\\{"copy":\\["', ""),
-                  FabricAndCare = str_extract(BFG, '"([^"]+)"'),) %>%
-           select(-BFG)
-       }
-       
-       return(DF_To_Export)
-    }
+    return(DF_To_Export)
+  
 }  
-  
 
-FixBrokenProducts <- function(PreviousDF){
-  TempDF <- PreviousDF %>% 
-    filter(ProductDetails == "") %>%
-    mutate(
-      WhyWeLoveIt = "",
-      Specs = ""
-    )
-} 
 
-  
+
+ExportDF <- ProductInformation(ExtractBackpacks(URL))
 
 
 
@@ -346,13 +374,6 @@ DemoF_To_Export <- DF_To_Export %>% filter(WhyWeLoveIt == "")
 
 
 # Weird things like no why we love it: https://www.llbean.com/llb/shop/125522?page=mountain-classic-school-backpack
-  
-  
-
-
-
-
-
 
 
 
