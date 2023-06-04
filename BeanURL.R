@@ -4,24 +4,20 @@ library(httr)
 
 URL <- "https://www.llbean.com/llb/shop/816?page=school-backpacks-and-lunch-boxes"
 URL <- "https://www.llbean.com/llb/shop/818?page=school-backpacks&csp=f&bc=50-816&start=1&viewCount=48&nav=ln-816"
+# URL <- "https://www.llbean.com/llb/shop/516673?page=luggage-and-duffle-bags&bc=50&csp=f&nav=gnro-818" # Can't quite work on other pages but with modification it might be able to
 
 ExtractBackpacks <- function(URL_Of_Category){
     
-    # Retrieve webpage content from URL
     response <- content(GET(URL), as = "text")
     
-    # Extract all text nodes from the HTML content
     entities <- html_nodes(read_html(response), xpath = "//*/text()")
     
-    # Clean and transform the data into a structured data frame
     df <- data.frame(entity = trimws(entities, "both"), stringsAsFactors = FALSE) %>%
       filter(entity != "") %>%
       filter(startsWith(entity, "window.__INITIAL_STATE_"))
     
-    # Split the data
     df2 <- as.data.frame(strsplit(df[1,1], "\\},\\{")[[1]])
     
-    # Prepare and structure data for final output
     suppressMessages({
       df3 <- df2 %>%
         pivot_longer(everything(), names_to = "Key", values_to = "Value") %>%
@@ -29,13 +25,12 @@ ExtractBackpacks <- function(URL_Of_Category){
         filter(grepl("^\"page_productName", Value)) %>%
         separate(Value, into = paste0("col", 1:15), sep = '":"') 
       
-      # Separate each column at every instance of '","'
       for (i in 1:ncol(df3)) {
         col_name <- paste0("col", i)
         df3 <- separate(df3, col = col_name, into = col_name, sep = '","')
       }
     })
-    # Choose necessary columns, rename them, and prepare the final URLs
+    
     df4 <- df3 %>%
       select(col3, col4, col7, col9) %>% 
       rename(NamesForURL = col3,
@@ -291,3 +286,5 @@ ProductInformation <- function(URL_List_Products){
 }  
 
 ExportDF <- ProductInformation(ExtractBackpacks(URL))
+
+write.csv(ExportDF, "DemoCSV_Bean_June4.csv")
