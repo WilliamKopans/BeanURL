@@ -56,22 +56,23 @@ ExtractProductInformation <- function(URL_Of_Category) {
   for (Product in BasicInfo$ProductLink) {
     print(Product, quote=FALSE)
     
-      tryCatch(
-        expr = {
-          responseProductPage <- content(GET(Product), as = "text")
-          entitiesProductPage <- html_nodes(read_html(responseProductPage), xpath = "//*/text()")
-          # Process the entitiesProductPage or perform other operations here
-        },
-        error = function(e) {
-          # Handle the error and exit the loop
-          if (grepl("The page was not found", e$message)) {
-            message("The requested page does not exist.")
-          } else {
-            message("An error occurred:", e$message)
-          }
-          return()   # Move on to the next iteration of the loop
+    tryCatch(
+      expr = {
+        responseProductPage <- content(GET(Product), as = "text")
+        entitiesProductPage <- html_nodes(read_html(responseProductPage), xpath = "//*/text()")
+        # Process the entitiesProductPage or perform other operations here
+      },
+      error = function(e) {
+        # Handle the error and exit the loop
+        if (grepl("The page was not found", e$message)) {
+          message(paste("The requested page does not exist. Please check URL.", "\nNote: This is a known issue where 'swatch' exists where a numeric identifier should exist."))
+          
+        } else {
+          message("An error occurred:", e$message)
         }
-      )
+        return()   # Move on to the next iteration of the loop
+      }
+    )
     
     df2ProductPage <- data.frame(entity = trimws(entitiesProductPage, "both"), stringsAsFactors = FALSE) %>%
       filter(entity != "") %>%
@@ -87,9 +88,9 @@ ExtractProductInformation <- function(URL_Of_Category) {
       mutate(ImageUrl = str_remove_all(ImageUrl, "\"")) %>% 
       mutate(ImageUrl = str_remove_all(ImageUrl, ":")) %>%
       filter(!grepl("propertyogimage|typetag", ImageUrl)) %>% 
-      mutate(ImageUrl = str_remove(ImageUrl, 'quantity1.*')) %>%
-      mutate(ImageUrl = str_replace_all(ImageUrl, "\\}\\],", "")) %>%
-      mutate(ImageUrl = str_replace_all(ImageUrl, "https//", "https://")) %>% 
+      mutate(ImageUrl = str_remove(ImageUrl, 'quantity1.*'),
+             ImageUrl = str_replace_all(ImageUrl, "\\}\\],", ""),
+             ImageUrl = str_replace_all(ImageUrl, "https//", "https://")) %>% 
       select(-entity) %>%
       distinct()
     
@@ -97,38 +98,37 @@ ExtractProductInformation <- function(URL_Of_Category) {
     
     ProductInfo <- df2ProductPage %>%
       filter(grepl("sellingDesc", entity)) %>%
-      mutate(ProductName = str_remove(entity, '.*shortDesc')) %>% 
-      mutate(ProductName = str_remove(ProductName, "isDormant.*")) %>%
-      mutate(ProductDetails = str_remove(entity, '.*premiseStatement":"')) %>% 
-      mutate(AdditionalFeatures = str_remove(entity, '.*additionalFeaturesBullet')) %>%
-      mutate(AdditionalFeatures = str_replace_all(AdditionalFeatures, "\\:\\{\"copy\":\\[\"", "")) %>%  # I think this will be repeated can I remove `":{"copy":["` altogether?
-      mutate(Construction = str_remove(AdditionalFeatures, '.*constructionBullet')) %>% 
-      mutate(Construction = str_replace_all(Construction, "\\:\\{\"copy\":\\[\"", "")) %>% 
-      mutate(Construction = str_remove(Construction, "constructionHeadline.*")) %>% 
-      mutate(FabricAndCare = str_remove(AdditionalFeatures, '.*fabricContentBullet')) %>% 
-      mutate(FabricAndCare = str_replace_all(FabricAndCare, "\\:\\{\"copy\":\\[\"", "")) %>% 
-      mutate(Specs = str_remove(FabricAndCare, '.*componentDesc')) %>%
-      mutate(Specs = str_extract(Specs, "\\[.*")) %>% 
-      mutate(WhyWeLoveIt = str_remove(Specs, '.*whyWeLoveItDesc')) %>% 
-      mutate(ForLink = str_remove(Specs, '.*pageParam')) %>% 
+      mutate(ProductName = str_remove(entity, '.*shortDesc'),
+             ProductName = str_remove(ProductName, "isDormant.*"),
+             ProductDetails = str_remove(entity, '.*premiseStatement":"'),
+             AdditionalFeatures = str_remove(entity, '.*additionalFeaturesBullet'),
+             AdditionalFeatures = str_replace_all(AdditionalFeatures, "\\:\\{\"copy\":\\[\"", ""),
+             Construction = str_remove(AdditionalFeatures, '.*constructionBullet'),
+             Construction = str_replace_all(Construction, "\\:\\{\"copy\":\\[\"", ""),
+             Construction = str_remove(Construction, "constructionHeadline.*"),
+             FabricAndCare = str_remove(AdditionalFeatures, '.*fabricContentBullet'),
+             FabricAndCare = str_replace_all(FabricAndCare, "\\:\\{\"copy\":\\[\"", ""),
+             Specs = str_remove(FabricAndCare, '.*componentDesc'),
+             Specs = str_extract(Specs, "\\[.*"),
+             WhyWeLoveIt = str_remove(Specs, '.*whyWeLoveItDesc'),
+             ForLink = str_remove(Specs, '.*pageParam')) %>% 
       select(-entity) %>%
-      mutate(ProductDetails = str_remove(ProductDetails, "sellingHeadline.*")) %>%
-      mutate(AdditionalFeatures = str_remove(AdditionalFeatures, "additionalFeaturesHeadline.*")) %>%
-      mutate(FabricAndCare = str_remove(FabricAndCare, "specs.*")) %>% 
-      mutate(Specs = str_remove(Specs, "specsHeadline.*")) %>% 
-      mutate(WhyWeLoveIt = str_remove(WhyWeLoveIt, "whyWeLoveItHeadline.*")) %>% 
-      mutate(ForLink = str_remove(ForLink, "isODSProduct*")) %>%
-      mutate_at(vars(-ProductName), ~ str_replace_all(., "[^a-zA-Z0-9- \"]", "")) %>%
+      mutate(ProductDetails = str_remove(ProductDetails, "sellingHeadline.*"),
+             AdditionalFeatures = str_remove(AdditionalFeatures, "additionalFeaturesHeadline.*"),
+             FabricAndCare = str_remove(FabricAndCare, "specs.*"),
+             Specs = str_remove(Specs, "specsHeadline.*"),
+             WhyWeLoveIt = str_remove(WhyWeLoveIt, "whyWeLoveItHeadline.*"),
+             ForLink = str_remove(ForLink, "isODSProduct*"),) %>% 
+      mutate_at(vars(-ProductName), ~ str_replace_all(., "[^a-zA-Z0-9- \"]", "")) %>% 
       mutate_all(~ str_replace(., "^\"", "")) %>% 
-      mutate(ForLink = str_remove(ForLink, "false.*")) %>%
-      mutate(ForLink = str_remove_all(ForLink, "\"")) %>%
-      mutate(ProductName = str_remove_all(ProductName, "\"")) %>%
-      mutate(ProductName = str_sub(ProductName, start = 2, end = -2)) %>% 
-      mutate(Images = ImageString) %>% 
+      mutate(ForLink = str_remove(ForLink, "false.*"),
+             ForLink = str_remove_all(ForLink, "\""),
+             ProductName = str_remove_all(ProductName, "\""),
+             ProductName = str_sub(ProductName, start = 2, end = -2),
+             Images = ImageString) %>% 
       select(ProductName, ProductDetails, AdditionalFeatures, Construction, FabricAndCare, WhyWeLoveIt, Specs, ForLink, Images)
     
     merged_df <- inner_join(BasicInfo, ProductInfo, by = "ForLink")
-    
     
     ForExport <- bind_rows(merged_df, ForExport)
     
@@ -144,8 +144,6 @@ ExtractProductInformation <- function(URL_Of_Category) {
   ForExport <- ForExport %>% 
     select(-which(colnames(.) == "ProductName")[2]) %>% 
     mutate(Specs = str_replace_all(Specs, "upCapacity", "up. Capacity")) %>%
-    # mutate(Images = str_extract(Images, "attrValueLime.*")) %>%
-    # mutate(Images = ifelse(str_detect(Images, "priceCategoryF"), str_replace(Images, ".*priceCategoryF", "priceCategoryF"), Images)) %>%
     mutate(Images = str_extract(Images, "https.*")) %>% 
     mutate(Images = ifelse(str_detect(Images, "monogram"), str_replace(Images, ".*monogram", "monogram"), Images)) %>% 
     mutate(Images = str_extract(Images, "https.*")) %>% 
@@ -197,8 +195,6 @@ MensInsulatedJackets <- ExtractProductInformation(URL)
 
 URL = "https://www.llbean.com/llb/shop/594?page=mens-sweaters&bc=12-26&csp=f&nav=gnro-818"
 MensSweaters <- ExtractProductInformation(URL)
-
-
 
 
 
