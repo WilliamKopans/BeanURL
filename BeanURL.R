@@ -143,21 +143,24 @@ ExtractProductInformation <- function(URL_Of_Category) {
   
   ForExport <- ForExport %>% 
     select(-which(colnames(.) == "ProductName")[2]) %>% 
-    mutate(Specs = str_replace_all(Specs, "upCapacity", "up. Capacity")) %>%
-    mutate(Images = str_extract(Images, "https.*")) %>% 
-    mutate(Images = ifelse(str_detect(Images, "monogram"), str_replace(Images, ".*monogram", "monogram"), Images)) %>% 
-    mutate(Images = str_extract(Images, "https.*")) %>% 
-    mutate(Images = ifelse(str_detect(Images, "percentageOverall"), str_replace(Images, ".*percentageOverall", "percentageOverall"), Images)) %>%
-    mutate(Images = ifelse(str_detect(Images, "Full100"), str_extract(Images, "https.*"), Images))
-  
+    mutate(Specs = str_replace_all(Specs, "upCapacity", "up. Capacity"),
+           Images = str_extract(Images, "https.*"),
+           Images = ifelse(str_detect(Images, "monogram"), str_replace(Images, ".*monogram", "monogram"), Images),
+           Images = str_extract(Images, "https.*"),
+           Images = ifelse(str_detect(Images, "percentageOverall"), str_replace(Images, ".*percentageOverall", "percentageOverall"), Images),
+           Images = ifelse(str_detect(Images, "Full100"), str_extract(Images, "https.*"), Images)) %>% 
+    tidyr::separate(Images, into = paste0("Images", 1:5), sep = ' <br> ', extra = "drop", fill = "right") %>% 
+    distinct()
   
   return(ForExport)
   
 }
 
 
+
 URL <- "https://www.llbean.com/llb/shop/818?page=school-backpacks&csp=f&bc=50-816&start=1&viewCount=48&nav=ln-816"
 BackpackInformation <- ExtractProductInformation(URL)
+write.xlsx(BackpackInformation, "BackpackInformation.xlsx", rowNames = FALSE)
 
 URL = "https://www.llbean.com/llb/shop/516672?page=bags-and-totes&bc=50&csp=f&nav=gnro-594" # Largely works, some columns off
 Totes <- ExtractProductInformation(URL)
