@@ -1,290 +1,165 @@
-library(tidyverse)
-library(rvest)
-library(httr)
 
-URL <- "https://www.llbean.com/llb/shop/816?page=school-backpacks-and-lunch-boxes"
 URL <- "https://www.llbean.com/llb/shop/818?page=school-backpacks&csp=f&bc=50-816&start=1&viewCount=48&nav=ln-816"
-# URL <- "https://www.llbean.com/llb/shop/516673?page=luggage-and-duffle-bags&bc=50&csp=f&nav=gnro-818" # Can't quite work on other pages but with modification it might be able to
 
-ExtractBackpacks <- function(URL_Of_Category){
-    
-    response <- content(GET(URL), as = "text")
-    
-    entities <- html_nodes(read_html(response), xpath = "//*/text()")
-    
-    df <- data.frame(entity = trimws(entities, "both"), stringsAsFactors = FALSE) %>%
-      filter(entity != "") %>%
-      filter(startsWith(entity, "window.__INITIAL_STATE_"))
-    
-    df2 <- as.data.frame(strsplit(df[1,1], "\\},\\{")[[1]])
-    
-    suppressMessages({
-      df3 <- df2 %>%
-        pivot_longer(everything(), names_to = "Key", values_to = "Value") %>%
-        select(-Key) %>%
-        filter(grepl("^\"page_productName", Value)) %>%
-        separate(Value, into = paste0("col", 1:15), sep = '":"') 
-      
-      for (i in 1:ncol(df3)) {
-        col_name <- paste0("col", i)
-        df3 <- separate(df3, col = col_name, into = col_name, sep = '","')
-      }
-    })
-    
-    df4 <- df3 %>%
-      select(col3, col4, col7, col9) %>% 
-      rename(NamesForURL = col3,
-             SomeTag = col4,
-             NamesReadable = col7,
-             InternalIDs = col9) %>% 
-      mutate(NamesForURL = paste0("https://www.llbean.com/llb/shop/",SomeTag,"?page=", NamesForURL))
-    
-    URL_List <- list(df4[,1])
-    return(URL_List)
-}
-
-ProductInformation <- function(URL_List_Products){
+ExtractProductInformation <- function(URL_Of_Category) {
   
-  DF_To_Export <- data.frame()
+  ForExport <- data.frame(Images = character(),
+                          ProductName = character(),
+                          ProductDetails = character(),
+                          AdditionalFeatures = character(),
+                          Construction = character(),
+                          FabricAndCare = character(),
+                          WhyWeLoveIt = character(),
+                          Specs = character(),
+                          ProductLink = character(),
+                          Price = character(),
+                          stringsAsFactors = FALSE)
   
-  URL_List_Products <- URL_List_Products[[1]]$NamesForURL
+  response <- httr::content(httr::GET(URL_Of_Category), as = "text")
   
-  for (link in URL_List_Products){
+  entities <- rvest::html_nodes(rvest::read_html(response), xpath = "//*/text()")
+  
+  BasicInfo <- data.frame(entity = trimws(entities, "both"), stringsAsFactors = FALSE) %>%
+    dplyr::filter(entity != "") %>%
+    dplyr::filter(startsWith(entity, "window.__INITIAL_STATE_")) %>%
+    rowwise() %>%
+    mutate(entity = list(strsplit(entity, "\\},\\{")[[1]])) %>%
+    unnest(entity) %>%
+    as.data.frame()%>% 
+    tidyr::pivot_longer(everything(), names_to = "Key", values_to = "Value") %>%
+    dplyr::select(-Key) %>%
+    filter(grepl("page_pageParamValue_s", Value),
+           grepl("page_productName_default_s", Value)) %>%
+    tidyr::separate(Value, into = paste0("col", 1:40), sep = '","', extra = "drop", fill = "right") %>%
+    mutate(Sale = ifelse(grepl("minSalePrice_f", col3), col3, NA)) %>% 
+    mutate(Sale = str_replace(Sale, 'minSalePrice_f":', ''),
+           Sale = str_replace(Sale, ',"', ''),
+           Sale = str_remove(Sale, "fullPriceSwatches_ss.*")) %>% 
+    tidyr::separate(col2, into = c("Price","ForLink"), sep = 'page_pageParamValue_s', fill = "right") %>% 
+    filter(!grepl("categoryId", Price)) %>% 
+    select("col1", "Price", "ForLink", "Sale", everything()) %>% 
+    unite(ProductID, col4:last_col(), sep = " ") %>% 
+    mutate(ProductID = str_remove(ProductID, ".*pageID_s\":\"")) %>%
+    mutate(ProductID = str_sub(ProductID, start = 1, end = 6)) %>% 
+    mutate(Price = str_replace(Price, 'minFullPrice_f":', ''),
+           Price = str_replace(Price, ',"', ''),
+           col1 = str_replace(col1, '"page_productName_default_s":"', ''),
+           ForLink = str_replace(ForLink, '":"', '')) %>% 
+    mutate(ProductLink = paste0("https://www.llbean.com/llb/shop/",ProductID,"?page=", ForLink)) %>% 
+    rename(ProductName = col1) %>% 
+    select(-col3, -ProductID) %>%
+    mutate(ProductLink = str_remove_all(ProductLink, "\\s"))
+  
+  # Per Product:
+  # Product <- "https://www.llbean.com/llb/shop/127158?page=comfort-carry-laptop-pack-28l-print"
+  
+  for (Product in BasicInfo$ProductLink) {
+    print(Product, quote=FALSE)
     
-    URLProductPage <- link
-    print(URLProductPage)
-    
-    responseProductPage <- content(GET(URLProductPage), as = "text")
-    
-    entitiesProductPage <- html_nodes(read_html(responseProductPage), xpath = "//*/text()")
-    
-    dfProductPage <- data.frame(entity = trimws(entitiesProductPage, "both"), stringsAsFactors = FALSE) %>%
-      filter(entity != "") %>%
-      filter(startsWith(entity, "window.__INITIAL_STATE_"))
-    
-    df2ProductPage <- as.data.frame(strsplit(dfProductPage[1,1], "\\},\\{")[[1]])
-    
-    testdf <- df2ProductPage
-    names(testdf) <- "BFG"
-    NeededRow <- as.data.frame(testdf[grepl("rel\":\"alternate\",\"href", testdf$BFG), ])
-    NeededRow$BFGTwo <- as.data.frame(testdf[grepl("\"property\":\"og:image", testdf$BFG), ])
-    
-    names <- colnames(NeededRow)
-    names[1] <- "BFG"
-    names[2] <- "BFGTwo"
-    colnames(NeededRow) <- names
-    
-    names(NeededRow)[1] <- "BFG"
-    names(NeededRow)[2] <- "BFGTwo"
-    
-    text <- as.character(NeededRow$BFGTwo)
-    regex_pattern <- "\"content\":\"(.*?)\""
-    match <- str_match(text, regex_pattern)
-    NeededRow$BFGTwo[1] <- match[2]
-    
-    
-    df2ProductPageSelect <- NeededRow %>% 
-      separate('BFG', into = paste0("col", 1:200), sep = ':', extra = "merge", remove = FALSE)  %>%
-      select(where(~ any(. != "", na.rm = TRUE))) %>%
-      select(BFGTwo, col27, col42, col48, col52, col58, col70, col61, col62, col63, col64, col65, col66) %>%
-      mutate(Specs = paste(col61, col62, col63, col64, col65, col66, collapse = "")) %>% 
-      select(BFGTwo, col27, col42, col48, col52, col58, col70, Specs) %>% 
-      rename(
-        ProductName = col27,
-        ProductDetails = col42,
-        AdditionalFeatures = col48,
-        Construction = col52,
-        FabricAndCare = col58,
-        WhyWeLoveIt = col70
-      ) %>% 
-      mutate(PLink = as.character(URLProductPage))
-    
-    TempDF <- df2ProductPageSelect %>% 
-      filter(ProductDetails == "") %>%
-      mutate(
-        WhyWeLoveIt = "",
-        Specs = ""
+      tryCatch(
+        expr = {
+          responseProductPage <- content(GET(Product), as = "text")
+          entitiesProductPage <- html_nodes(read_html(responseProductPage), xpath = "//*/text()")
+          # Process the entitiesProductPage or perform other operations here
+        },
+        error = function(e) {
+          # Handle the error and exit the loop
+          if (grepl("The page was not found", e$message)) {
+            message("The requested page does not exist.")
+          } else {
+            message("An error occurred:", e$message)
+          }
+          return()   # Move on to the next iteration of the loop
+        }
       )
     
-    Gapsdf2ProductPageSelect <- NeededRow %>% 
-      separate('BFG', into = paste0("col", 1:200), sep = ':', extra = "merge", remove = FALSE)  %>%
-      select(where(~ any(. != "", na.rm = TRUE))) %>%
-      select(col27, col42, col47, col52, col53, col57, col54, col58, col75, col61,col62,col63,col64,col65, col66, col70, col75, BFGTwo, col67,col68, col69, col70, col71) %>% 
-      mutate(Specs = paste(col67,col68, col69, col70, col71, collapse = "")) %>% 
-      select(BFGTwo, col27, col47, col53, col57, col63,col70, col75, Specs) %>% 
-      rename(
-        ProductDetails = col47,
-        ProductName = col27,
-        AdditionalFeatures = col53,
-        Construction = col57,
-        FabricAndCare = col63,
-        WhyWeLoveIt = col75
-      ) %>% 
-      mutate(PLink = as.character(URLProductPage)) %>% 
-      select("BFGTwo", "ProductName", "ProductDetails", "AdditionalFeatures", "Construction", "FabricAndCare", "WhyWeLoveIt", "Specs", "PLink")
+    df2ProductPage <- data.frame(entity = trimws(entitiesProductPage, "both"), stringsAsFactors = FALSE) %>%
+      filter(entity != "") %>%
+      filter(startsWith(entity, "window.__INITIAL_STATE_")) %>%
+      slice(1) %>%
+      mutate(entity = lapply(strsplit(entity, "\\},\\{"), unlist)) %>%
+      unnest(entity) %>%
+      as.data.frame()
     
-    if (nrow(TempDF) > 0 || any(grepl("premiseStatement", df2ProductPageSelect$Construction)) || any(grepl("\\{\"copy\"", df2ProductPageSelect$Construction))) {
-      print("Extraction Method Two Used")
-      df2ProductPageSelect <- Gapsdf2ProductPageSelect %>% 
-        mutate(changed = TRUE) 
-      
-    }
+    Images <- df2ProductPage %>%
+      filter(grepl("cdni", entity)) %>% 
+      mutate(ImageUrl = str_remove(entity, ".*path")) %>%
+      mutate(ImageUrl = str_remove_all(ImageUrl, "\"")) %>% 
+      mutate(ImageUrl = str_remove_all(ImageUrl, ":")) %>%
+      filter(!grepl("propertyogimage|typetag", ImageUrl)) %>% 
+      mutate(ImageUrl = str_remove(ImageUrl, 'quantity1.*')) %>%
+      mutate(ImageUrl = str_replace_all(ImageUrl, "\\}\\],", "")) %>%
+      mutate(ImageUrl = str_replace_all(ImageUrl, "https//", "https://")) %>% 
+      select(-entity) %>%
+      distinct()
     
-    df2ProductPageSelect <- df2ProductPageSelect %>% 
-      mutate_all(~ str_replace_all(.x, "componentDesc", "")) %>%
-      mutate_all(~ str_replace_all(.x, "specCopy", "")) %>% 
-      mutate_all(~ str_replace_all(.x, ".,", "")) %>%
-      mutate(WhyWeLoveIt = ifelse(grepl("Why We Love It,secondaryHeaderTxt      ", WhyWeLoveIt), "", WhyWeLoveIt))
-
-    df2ProductPageSelect_transposed <- as.data.frame(t(df2ProductPageSelect)) 
+    ImageString <- paste(Images$ImageUrl, collapse = " <br> ")
     
-    df2ProductPageSelect_transposed <- df2ProductPageSelect_transposed %>%
-      separate(col = V1, into = paste0("V", 1:100), sep = '","', remove = FALSE, convert = FALSE)
-    df2ProductPageSelect_transposed <- df2ProductPageSelect_transposed %>%
-      select_if(function(col) any(col != "")) %>%
-      mutate_all(~ ifelse(. == "productCopy", NA, .)) %>%
-      mutate_all(~ str_replace(.x, "constructionHeadline", "")) %>%
-      mutate_all(~ str_replace(.x, "specsHeadline", "")) %>%
-      mutate_all(~ str_replace(.x, "additionalFeaturesHeadline", "")) %>%
-      mutate_all(~ str_replace(.x, "specs", "")) %>%
-      mutate_all(~ str_replace(.x, "Dimensions ", "")) %>%
-      unite(combined_column, everything(), sep = " <br> ") %>%
-      mutate_all(~ str_replace_all(.x, "<br> NA", "")) %>%
-      mutate_all(~ str_replace(.x, "^ <br>  ", "")) %>%
-      mutate_all(~ str_replace(.x, " NA$", ""))
+    ProductInfo <- df2ProductPage %>%
+      filter(grepl("sellingDesc", entity)) %>%
+      mutate(ProductName = str_remove(entity, '.*shortDesc')) %>% 
+      mutate(ProductName = str_remove(ProductName, "isDormant.*")) %>%
+      mutate(ProductDetails = str_remove(entity, '.*premiseStatement":"')) %>% 
+      mutate(AdditionalFeatures = str_remove(entity, '.*additionalFeaturesBullet')) %>%
+      mutate(AdditionalFeatures = str_replace_all(AdditionalFeatures, "\\:\\{\"copy\":\\[\"", "")) %>%  # I think this will be repeated can I remove `":{"copy":["` altogether?
+      mutate(Construction = str_remove(AdditionalFeatures, '.*constructionBullet')) %>% 
+      mutate(Construction = str_replace_all(Construction, "\\:\\{\"copy\":\\[\"", "")) %>% 
+      mutate(Construction = str_remove(Construction, "constructionHeadline.*")) %>% 
+      mutate(FabricAndCare = str_remove(AdditionalFeatures, '.*fabricContentBullet')) %>% 
+      mutate(FabricAndCare = str_replace_all(FabricAndCare, "\\:\\{\"copy\":\\[\"", "")) %>% 
+      mutate(Specs = str_remove(FabricAndCare, '.*componentDesc')) %>%
+      mutate(Specs = str_extract(Specs, "\\[.*")) %>% 
+      mutate(WhyWeLoveIt = str_remove(Specs, '.*whyWeLoveItDesc')) %>% 
+      mutate(ForLink = str_remove(Specs, '.*pageParam')) %>% 
+      select(-entity) %>%
+      mutate(ProductDetails = str_remove(ProductDetails, "sellingHeadline.*")) %>%
+      mutate(AdditionalFeatures = str_remove(AdditionalFeatures, "additionalFeaturesHeadline.*")) %>%
+      mutate(FabricAndCare = str_remove(FabricAndCare, "specs.*")) %>% 
+      mutate(Specs = str_remove(Specs, "specsHeadline.*")) %>% 
+      mutate(WhyWeLoveIt = str_remove(WhyWeLoveIt, "whyWeLoveItHeadline.*")) %>% 
+      mutate(ForLink = str_remove(ForLink, "isODSProduct*")) %>%
+      mutate_at(vars(-ProductName), ~ str_replace_all(., "[^a-zA-Z0-9- \"]", "")) %>%
+      mutate_all(~ str_replace(., "^\"", "")) %>% 
+      mutate(ForLink = str_remove(ForLink, "false.*")) %>%
+      mutate(ForLink = str_remove_all(ForLink, "\"")) %>%
+      mutate(ProductName = str_remove_all(ProductName, "\"")) %>%
+      mutate(ProductName = str_sub(ProductName, start = 2, end = -2)) %>% 
+      mutate(Images = ImageString) %>% 
+      select(ProductName, ProductDetails, AdditionalFeatures, Construction, FabricAndCare, WhyWeLoveIt, Specs, ForLink, Images)
     
-    FixLoveAndCare <- as.data.frame(t(df2ProductPageSelect_transposed)) %>%
-      mutate(FabricAndCare = ifelse(FabricAndCare == '["Spot clean."]""',
-                                    str_replace_all(FabricAndCare, '\\["Spot clean."\\]""', 'Spot clean.'),
-                                    FabricAndCare)) %>% 
-      filter(WhyWeLoveIt == "{\"copy\"") %>% 
-      mutate(NeededRow$BFG) %>%
-      rename(BFG = 'NeededRow$BFG') %>% 
-      mutate(BFG = str_remove(BFG, ".*whyWeLoveItDesc"),
-             BFG = str_replace(BFG, '\\:\\{"copy":\\["', ""),
-             WhyWeLoveIt = str_extract(BFG, '"([^"]+)"')) %>% 
-      select(-BFG)
-    
-    TestFixNeeded <- as.data.frame(t(df2ProductPageSelect_transposed)) %>%
-      filter(WhyWeLoveIt == "{\"copy\"")
-    
-    EdgeCaseTest <- as.data.frame(t(df2ProductPageSelect_transposed)) %>%  # Not sure the root cause of why I need this...
-      mutate(FabricAndCare = ifelse(FabricAndCare == '["Spot clean."]""',
-                                    str_replace_all(FabricAndCare, '\\["Spot clean."\\]""', 'Spot clean.'),
-                                    FabricAndCare)) %>% 
-      filter(WhyWeLoveIt == '["Why We Love It"]}}"secondaryHeaderTxt"') %>% 
-      mutate(NeededRow$BFG) %>%
-      rename(BFG = 'NeededRow$BFG') %>% 
-      mutate(BFG = str_remove(BFG, ".*whyWeLoveItDesc"),
-             BFG = str_replace(BFG, '\\:\\{"copy":\\["', ""),
-             WhyWeLoveIt = str_extract(BFG, '"([^"]+)"')) %>% 
-      select(-BFG)
-    
-    EdgeCaseTestSecond <- as.data.frame(t(df2ProductPageSelect_transposed)) %>%  # Not sure the root cause of why I need this...
-      mutate(FabricAndCare = ifelse(FabricAndCare == '["Spot clean."]""',
-                                    str_replace_all(FabricAndCare, '\\["Spot clean."\\]""', 'Spot clean.'),
-                                    FabricAndCare)) %>% 
-      filter(WhyWeLoveIt == '["Why We Love It"]}}"secondaryHeaderTxt"') %>% 
-      mutate(NeededRow$BFG) %>%
-      rename(BFG = 'NeededRow$BFG') %>% 
-      mutate(BFG = str_remove(BFG, ".*fabricContentBullet"),
-             BFG = str_replace(BFG, '\\:\\{"copy":\\["', ""),
-             FabricAndCare = str_extract(BFG, '"([^"]+)"'),
-             WhyWeLoveIt = "") %>% 
-      select(-BFG)
-    
-    FinalProductDF <- as.data.frame(t(df2ProductPageSelect_transposed))
-    if (nrow(TestFixNeeded) > 0){
-      print("Fixed Love & Care")
-      FinalProductDF <- FixLoveAndCare
-    }
-    if (nrow(EdgeCaseTest) > 0){
-      print("Fixed Edge Case")
-      FinalProductDF <- EdgeCaseTest
-      
-      if (grepl("Drawstring", EdgeCaseTest$ProductName)) {
-        FinalProductDF <- EdgeCaseTestSecond
-      }
-      
-    }
-    if (any(grepl("isODSProduct", FinalProductDF$WhyWeLoveIt))) {
-      FinalProductDF <- as.data.frame(t(df2ProductPageSelect_transposed)) %>%
-        mutate(FabricAndCare = ifelse(FabricAndCare == '["Spot clean."]""',
-                                      str_replace_all(FabricAndCare, '\\["Spot clean."\\]""', 'Spot clean.'),
-                                      FabricAndCare)) %>% 
-        mutate(WhyWeLoveIt = "")
-    }
-    
-    if (any(grepl("Mountain Classic School", FinalProductDF$ProductName))) { # Unfortunately need to hard code this one, can't crack this nut!
-      print("Hardcoded: Mountain School")
-        FinalProductDF <- FinalProductDF %>%
-          mutate(NeededRow$BFG) %>%
-          rename(BFG = 'NeededRow$BFG') %>%
-          mutate(BFG = str_remove(BFG, ".*fabricContentBullet"),
-                 BFG = str_replace(BFG, '\\:\\{"copy":\\["', ""),
-                 FabricAndCare = str_extract(BFG, '"([^"]+)"'),) %>%
-          select(-BFG)
-    }
-    
-    PriceTwo <- as.data.frame(testdf[grepl('\"default\":false,\"id\":\"', testdf$BFG), ]) %>%
-      filter(grepl("price", `testdf[grepl(\"\\\"default\\\":false,\\\"id\\\":\\\"\", testdf$BFG), ]`)) %>% 
-      rename(Price = `testdf[grepl(\"\\\"default\\\":false,\\\"id\\\":\\\"\", testdf$BFG), ]`) %>%
-      mutate(Price = str_remove(Price, ".*fullPrice")) %>%
-      mutate(Price = str_remove(Price, ".*?:"))%>%
-      mutate(Price = gsub("potentialDiscounts.*", "", Price)) %>%
-      separate(Price, into = c("regular", "sale"), sep = "salePrice") %>%
-      mutate(regular = str_replace_all(regular, "[^0-9.]", ""),
-             sale = str_replace_all(sale, "[^0-9.]", "")) %>%
-      mutate(regular = as.numeric(regular),
-             sale = as.numeric(sale)) %>%
-      mutate(PriceLowest = ifelse(is.na(regular), sale,
-                               ifelse(is.na(sale), regular,
-                                      pmin(regular, sale, na.rm = TRUE)))) %>% 
-      select(PriceLowest)
-    DeterminedPrice = PriceTwo[1,1]
-      
-    FinalProductDF <- FinalProductDF %>% 
-      mutate(Price = DeterminedPrice)
+    merged_df <- inner_join(BasicInfo, ProductInfo, by = "ForLink")
     
     
-    DF_To_Export <- bind_rows(DF_To_Export, FinalProductDF)
+    ForExport <- bind_rows(merged_df, ForExport)
     
   }
   
-  DF_To_Export <- DF_To_Export %>%
-    filter(ProductDetails != "truedsplRsvLinkFlg ") %>%
-    mutate_all(~ str_replace_all(.x, "\\[|\\]|\\{|\\}|\"", "")) %>% 
-    mutate_all(~ str_replace(.x, "<br> isDormant", "")) %>%
-    mutate_all(~ str_replace(.x, "copy   ", "")) %>%
-    mutate_all(~ str_replace(.x, "copy", "")) %>%
-    mutate_all(~ str_replace(.x, "^\\s*<br>\\s*", "")) %>% 
-    mutate_all(~ str_replace(.x, "premiseStatement", "")) %>%
-    mutate(across(everything(), ~ifelse(grepl("isODSProduct", .), "", .))) %>% 
-    mutate(across(everything(), ~ifelse(grepl("rue,dsplRsvLinkFlg", .), "", .))) %>%
-    rename(Images = BFGTwo) %>%
-    mutate(Specs = str_trim(Specs),
-           WhyWeLoveIt = if_else(!grepl("ItsecondaryHeaderTxt", WhyWeLoveIt), WhyWeLoveIt, ""),
-           FabricAndCare = if_else(!grepl("polyester.Cotton X-Pac", FabricAndCare), FabricAndCare, ""), # Will want to combine these and make it pretty later
-           FabricAndCare = if_else(!grepl("denier nylon bottom", FabricAndCare), FabricAndCare, ""),
-           FabricAndCare = if_else(!grepl("Bluesign", FabricAndCare), FabricAndCare, ""),
-           FabricAndCare = str_replace(FabricAndCare, ".Spot", ". Spot"),
-           Specs = str_replace(Specs, "up.Capacity", "up. Capacity"),
-           ProductName = str_replace(ProductName, "isDormant", ""),
-           Specs = str_replace_all(Specs, "\\\\", "\" "),
-           Specs = if_else(!str_detect(Specs, fixed("Designed For  Ages")), paste("Designed For: all ages. ", Specs), Specs),
-           Specs = if_else(!str_detect(Specs, fixed("  ")), paste("", Specs), Specs),
-           Specs = str_replace(Specs, "Designed For  Ages\\. ", "Designed For: Ages"),
-           Specs = str_replace_all(Specs, "  ", " "),
-           FabricAndCare = str_replace(FabricAndCare, "laundry ba then ", "laundry bag then "),
-           ProductDetails = str_replace(ProductDetails, "everyda everywhere", "everyday everywhere"),
-           Specs = str_replace(Specs, "Designed For Ages", "Designed For: ages")
-    ) %>% 
-    select(-changed)
+  ForExport <- ForExport %>%
+    mutate_all(~ str_replace_all(., "\"\"", "")) %>%
+    mutate(WhyWeLoveIt = ifelse(grepl("Designed For", WhyWeLoveIt), "", WhyWeLoveIt)) %>% 
+    select(-ForLink, -ProductName)
   
-    return(DF_To_Export)
+  colnames(ForExport) <- gsub("\\..*", "", colnames(ForExport))
   
-}  
+  ForExport <- ForExport %>% 
+    select(-which(colnames(.) == "ProductName")[2]) %>% 
+    mutate(Specs = str_replace_all(Specs, "upCapacity", "up. Capacity")) %>%
+    mutate(Images = str_extract(Images, "attrValueLime.*")) %>%
+    mutate(Images = ifelse(str_detect(Images, "Mastercard."), str_replace(Images, ".*Mastercard.", "Mastercard."), Images)) %>%
+    mutate(Images = ifelse(str_detect(Images, "priceCategoryF"), str_replace(Images, ".*priceCategoryF", "priceCategoryF"), Images)) %>%
+    mutate(Images = str_extract(Images, "https.*"))
+  
+  return(ForExport)
+  
+}
 
-ExportDF <- ProductInformation(ExtractBackpacks(URL))
 
-write.csv(ExportDF, "DemoCSV_Bean_June4.csv")
+BackpackInformation <- ExtractProductInformation(URL)
+
+
+
+
+
+
+
+
