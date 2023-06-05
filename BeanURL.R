@@ -1,5 +1,5 @@
 
-URL <- "https://www.llbean.com/llb/shop/818?page=school-backpacks&csp=f&bc=50-816&start=1&viewCount=48&nav=ln-816"
+
 
 ExtractProductInformation <- function(URL_Of_Category) {
   
@@ -144,17 +144,60 @@ ExtractProductInformation <- function(URL_Of_Category) {
   ForExport <- ForExport %>% 
     select(-which(colnames(.) == "ProductName")[2]) %>% 
     mutate(Specs = str_replace_all(Specs, "upCapacity", "up. Capacity")) %>%
-    mutate(Images = str_extract(Images, "attrValueLime.*")) %>%
-    mutate(Images = ifelse(str_detect(Images, "Mastercard."), str_replace(Images, ".*Mastercard.", "Mastercard."), Images)) %>%
-    mutate(Images = ifelse(str_detect(Images, "priceCategoryF"), str_replace(Images, ".*priceCategoryF", "priceCategoryF"), Images)) %>%
-    mutate(Images = str_extract(Images, "https.*"))
+    # mutate(Images = str_extract(Images, "attrValueLime.*")) %>%
+    # mutate(Images = ifelse(str_detect(Images, "priceCategoryF"), str_replace(Images, ".*priceCategoryF", "priceCategoryF"), Images)) %>%
+    mutate(Images = str_extract(Images, "https.*")) %>% 
+    mutate(Images = ifelse(str_detect(Images, "monogram"), str_replace(Images, ".*monogram", "monogram"), Images)) %>% 
+    mutate(Images = str_extract(Images, "https.*")) %>% 
+    mutate(Images = ifelse(str_detect(Images, "percentageOverall"), str_replace(Images, ".*percentageOverall", "percentageOverall"), Images)) %>%
+    mutate(Images = ifelse(str_detect(Images, "Full100"), str_extract(Images, "https.*"), Images))
+  
   
   return(ForExport)
   
 }
 
 
+URL <- "https://www.llbean.com/llb/shop/818?page=school-backpacks&csp=f&bc=50-816&start=1&viewCount=48&nav=ln-816"
 BackpackInformation <- ExtractProductInformation(URL)
+
+URL = "https://www.llbean.com/llb/shop/516672?page=bags-and-totes&bc=50&csp=f&nav=gnro-594" # Largely works, some columns off
+Totes <- ExtractProductInformation(URL)
+
+URL <- "https://www.llbean.com/llb/shop/816?page=school-backpacks&csp=f&bc=50&sort_field=relevance&start=1&viewCount=75"
+SchoolBackpacksAndLunchBoxes <- ExtractProductInformation(URL)
+
+#
+
+URL1 <- "https://www.llbean.com/llb/shop/816?page=school-backpacks-and-lunch-boxes&bc=50&csp=f&nav=gnro-516672" # Largely works, some columns off
+SchoolBackpacksAndLunchBoxes <- ExtractProductInformation(URL1)
+
+URL2 <- "https://www.llbean.com/llb/shop/1098?page=hiking-backpacks&bc=50&csp=f&nav=gnro-516672" # Largely works, some columns off
+HikingBackpacks <- ExtractProductInformation(URL2)
+
+URL3 <- "https://www.llbean.com/llb/shop/516672?page=bags-and-totes&bc=50&csp=f&nav=gnro-516672" # Largely works some bugs
+BagsAndTotes <- ExtractProductInformation(URL3)
+
+URL4 <- "https://www.llbean.com/llb/shop/516673?page=luggage-and-duffle-bags&bc=50&csp=f&nav=gnro-516672" # Largely works, some columns off
+LuggageAndDuffleBags <- ExtractProductInformation(URL4)
+
+URL5 <- "https://www.llbean.com/llb/shop/203?page=travel-accessories&bc=50&csp=f&nav=gnro-516672" # Largely works some bugs
+TravelAccessories <- ExtractProductInformation(URL5)
+
+URL6 <- "https://www.llbean.com/llb/shop/507361?page=toiletry-bags-and-organizers&bc=50&csp=f&nav=gnro-516672" # Doesn't really work
+ToiletryBagsAndOrganizers <- ExtractProductInformation(URL6)
+
+#
+
+
+
+
+URL <- "https://www.llbean.com/llb/shop/506673?page=mens-insulated-jackets&bc=516567-593&csp=f&nav=gnro-818" # Does Not Work
+MensInsulatedJackets <- ExtractProductInformation(URL)
+
+URL = "https://www.llbean.com/llb/shop/594?page=mens-sweaters&bc=12-26&csp=f&nav=gnro-818"
+MensSweaters <- ExtractProductInformation(URL)
+
 
 
 
