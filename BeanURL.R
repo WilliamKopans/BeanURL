@@ -134,7 +134,8 @@ ExtractProductInformation <- function(URL_Of_Category) {
     
   }
   
-  ForExport <- ForExport %>%
+  ForExport <- ForExport %>% 
+    mutate(Lowest_Price = ifelse(!is.na(Sale), Sale, Price)) %>%
     mutate_all(~ str_replace_all(., "\"\"", "")) %>%
     mutate(WhyWeLoveIt = ifelse(grepl("Designed For", WhyWeLoveIt), "", WhyWeLoveIt)) %>% 
     select(-ForLink, -ProductName)
@@ -150,7 +151,23 @@ ExtractProductInformation <- function(URL_Of_Category) {
            Images = ifelse(str_detect(Images, "percentageOverall"), str_replace(Images, ".*percentageOverall", "percentageOverall"), Images),
            Images = ifelse(str_detect(Images, "Full100"), str_extract(Images, "https.*"), Images)) %>% 
     tidyr::separate(Images, into = paste0("Images", 1:5), sep = ' <br> ', extra = "drop", fill = "right") %>% 
-    distinct()
+    distinct() %>% 
+    tidyr::separate(Specs, into = c("Age", "Dimentions"), sep = 'Dimensions', extra = "drop", fill = "right") %>% 
+    tidyr::separate(Age, into = c("Age", "Capacity"), sep = 'Capacity', extra = "drop", fill = "right") %>% 
+    tidyr::separate(Dimentions, into = c("Dimentions", "Capacity"), sep = 'Capacity', extra = "drop", fill = "right") %>% 
+    tidyr::separate(Dimentions, into = c("Height", "Width", "Depth"), sep = 'x', extra = "drop", fill = "right") %>%
+    mutate(Height = str_replace(Height, '"H', ''),
+           Width = str_replace(Width, '"W":', ''),
+           Depth = str_replace(Depth, '"D":', '')) %>% 
+    mutate(
+      Height = str_replace_all(Height, '[^0-9.]', ''),
+      Width =  str_replace_all(Width,  '[^0-9.]', ''),
+      Depth =  str_replace_all(Depth,  '[^0-9.]', '')
+    ) %>%
+    mutate(Height = ifelse(nchar(Height) == 4, paste0(substring(Height, 1, 2), ".", substring(Height, 3)), Height),
+           Width = ifelse(nchar(Width) == 4, paste0(substring(Width, 1, 2), ".", substring(Width, 3)), Width),
+           Depth = ifelse(nchar(Depth) == 4, paste0(substring(Depth, 1, 2), ".", substring(Depth, 3)), Depth))
+   
   
   return(ForExport)
   
@@ -161,6 +178,7 @@ ExtractProductInformation <- function(URL_Of_Category) {
 URL <- "https://www.llbean.com/llb/shop/818?page=school-backpacks&csp=f&bc=50-816&start=1&viewCount=48&nav=ln-816"
 BackpackInformation <- ExtractProductInformation(URL)
 write.xlsx(BackpackInformation, "BackpackInformation.xlsx", rowNames = FALSE)
+
 
 URL = "https://www.llbean.com/llb/shop/516672?page=bags-and-totes&bc=50&csp=f&nav=gnro-594" # Largely works, some columns off
 Totes <- ExtractProductInformation(URL)
