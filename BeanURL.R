@@ -166,7 +166,16 @@ ExtractProductInformation <- function(URL_Of_Category) {
     ) %>%
     mutate(Height = ifelse(nchar(Height) == 4, paste0(substring(Height, 1, 2), ".", substring(Height, 3)), Height),
            Width = ifelse(nchar(Width) == 4, paste0(substring(Width, 1, 2), ".", substring(Width, 3)), Width),
-           Depth = ifelse(nchar(Depth) == 4, paste0(substring(Depth, 1, 2), ".", substring(Depth, 3)), Depth))
+           Depth = ifelse(nchar(Depth) == 4, paste0(substring(Depth, 1, 2), ".", substring(Depth, 3)), Depth),
+      across(
+        everything(),
+        as.character
+      ),
+      across(
+        matches("(Price|Sale|Height|Width|Depth|Lowest_Price)"),
+        as.numeric
+      )
+    )
    
   
   return(ForExport)
@@ -177,7 +186,7 @@ ExtractProductInformation <- function(URL_Of_Category) {
 
 URL <- "https://www.llbean.com/llb/shop/818?page=school-backpacks&csp=f&bc=50-816&start=1&viewCount=48&nav=ln-816"
 BackpackInformation <- ExtractProductInformation(URL)
-write.xlsx(BackpackInformation, "BackpackInformation.xlsx", rowNames = FALSE)
+write.xlsx(BackpackInformation, "BackpackInformationJune6.xlsx", rowNames = FALSE)
 
 
 URL = "https://www.llbean.com/llb/shop/516672?page=bags-and-totes&bc=50&csp=f&nav=gnro-594" # Largely works, some columns off
