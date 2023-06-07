@@ -48,7 +48,7 @@ ExtractProductInformation <- function(URL_Of_Category) {
     mutate(ProductLink = paste0("https://www.llbean.com/llb/shop/",ProductID,"?page=", ForLink)) %>% 
     rename(ProductName = col1) %>% 
     select(-col3, -ProductID) %>%
-    mutate(ProductLink = str_remove_all(ProductLink, "\\s"))
+    mutate(ProductLink = str_remove_all(ProductLink, "\\s")) 
   
   # Per Product:
   # Product <- "https://www.llbean.com/llb/shop/127158?page=comfort-carry-laptop-pack-28l-print"
@@ -163,7 +163,10 @@ ExtractProductInformation <- function(URL_Of_Category) {
       Height = str_replace_all(Height, '[^0-9.]', ''),
       Width =  str_replace_all(Width,  '[^0-9.]', ''),
       Depth =  str_replace_all(Depth,  '[^0-9.]', '')
-    ) %>%
+    ) %>% 
+    mutate(Liters = ProductName) %>% 
+    tidyr::separate(Liters, into = c("Delete","Liters"), sep = ',', fill = "right") %>% 
+    select(-Delete) %>% 
     mutate(Height = ifelse(nchar(Height) == 4, paste0(substring(Height, 1, 2), ".", substring(Height, 3)), Height),
            Width = ifelse(nchar(Width) == 4, paste0(substring(Width, 1, 2), ".", substring(Width, 3)), Width),
            Depth = ifelse(nchar(Depth) == 4, paste0(substring(Depth, 1, 2), ".", substring(Depth, 3)), Depth),
@@ -175,7 +178,11 @@ ExtractProductInformation <- function(URL_Of_Category) {
         matches("(Price|Sale|Height|Width|Depth|Lowest_Price)"),
         as.numeric
       )
-    )
+    ) %>%
+    mutate(Width = ifelse(Width > 50, Width * 0.1, Width),
+           Depth = ifelse(Depth > 50, Depth * 0.1, Depth),
+           Width = ifelse(Width > 50, Width * 0.1, Width),
+           Depth = ifelse(Depth > 50, Depth * 0.1, Depth))
    
   
   return(ForExport)
@@ -186,7 +193,7 @@ ExtractProductInformation <- function(URL_Of_Category) {
 
 URL <- "https://www.llbean.com/llb/shop/818?page=school-backpacks&csp=f&bc=50-816&start=1&viewCount=48&nav=ln-816"
 BackpackInformation <- ExtractProductInformation(URL)
-write.xlsx(BackpackInformation, "BackpackInformationJune6.xlsx", rowNames = FALSE)
+write.xlsx(BackpackInformation, "BackpackInformationJune7_Morning.xlsx", rowNames = FALSE)
 
 
 URL = "https://www.llbean.com/llb/shop/516672?page=bags-and-totes&bc=50&csp=f&nav=gnro-594" # Largely works, some columns off
