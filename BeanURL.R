@@ -50,7 +50,9 @@ ExtractProductInformationProd <- function(URL_Of_Category) {
     rename(
       Price = minFullPrice_f,
       Sale = minSalePrice_f,
-    )
+      ProductName = page_productName_default_s,
+    ) %>% 
+    mutate(Lowest_Price = ifelse(!is.na(Sale), Sale, Price))
   
   # Up until this point has been collecting all the information given to us on the category screen. Now I will dig into the individual products.
   
@@ -97,7 +99,7 @@ ExtractProductInformationProd <- function(URL_Of_Category) {
       mutate(entity = list(strsplit(entity, "\\},\\{")[[1]])) %>%
       unnest(entity) %>%
       as.data.frame()%>% # Everything up until this point is scraping the webpage and should not need any modification unless the site has a full redesign
-      slice(943) %>% 
+      filter(grepl("Why We Love It", entity, ignore.case = TRUE)) %>% 
       mutate(AdditionalFeatures = sub(".*additionalFeaturesBullet\\s*(.*)", "\\1", entity)) %>% # This and the next line are selecting just the additional features
       mutate(AdditionalFeatures = str_replace(AdditionalFeatures, "additionalFeaturesHeadline.*", "additionalFeaturesHeadline")) %>% # Additional features is not organized the same as other columns so needs to be dealt with seperately
       mutate(AdditionalFeatures = str_extract(AdditionalFeatures, "\\[(.*?)\\]")) %>% # Getting everything within the square brackets
@@ -107,73 +109,115 @@ ExtractProductInformationProd <- function(URL_Of_Category) {
       tidyr::separate(AdditionalFeatures, into = paste0("AdditionalFeatures", 1:10), sep = '","', extra = "drop", fill = "right") %>%
       select(-where(~ all(is.na(.) | . == "")))
     
+    
+    Images <- data.frame(entity = trimws(entitiesProductPage, "both"), stringsAsFactors = FALSE) %>%
+      filter(entity != "") %>%
+      filter(startsWith(entity, "window.__INITIAL_STATE_")) %>%
+      slice(1) %>%
+      mutate(entity = lapply(strsplit(entity, "\\},\\{"), unlist)) %>%
+      unnest(entity) %>%
+      as.data.frame() %>% 
+      filter(grepl("cdni", entity)) %>% 
+      mutate(ImageUrl = str_remove(entity, ".*path")) %>%
+      mutate(ImageUrl = str_remove_all(ImageUrl, "\"")) %>% 
+      mutate(ImageUrl = str_remove_all(ImageUrl, ":")) %>%
+      filter(!grepl("propertyogimage|typetag", ImageUrl)) %>% 
+      mutate(ImageUrl = str_remove(ImageUrl, 'quantity1.*'),
+             ImageUrl = str_replace_all(ImageUrl, "\\}\\],", ""),
+             ImageUrl = str_replace_all(ImageUrl, "https//", "https://")) %>% 
+      select(-entity) %>%
+      distinct()
+    
+    ImageString <- paste(Images$ImageUrl, collapse = " <br> ")
+    
     # Each cell in BasicInfo contains the information for the products on the category page and is identified with a tag such as `minFullPrice_f` that describes what is in the cell
     # The following statement breaks up the scraped information to split by the ID. They are out of order so more involved than just selecting specific columns
+    tryCatch({
     WithTagsProductPage <- InfoProductPage %>%
       rowid_to_column("id") %>%  # create a unique id for each row
       gather(key, value, -id) %>%  # convert data to long format
       separate(value, into = c("key", "value"), sep = ":", extra = "merge")  %>%  # split keys and values
       pivot_wider(names_from = key, values_from = value, values_fn = list(value = function(x) paste(x, collapse = "; ")))  # concatenate values
+    
+
+  
+  WithTagsProductPage <- WithTagsProductPage %>%  
+    `colnames<-`(gsub("\"", "", colnames(WithTagsProductPage))) %>%  # At this point you should have all of the useful information split into their own distinct columns
+    select("href","shortDesc", "sellingDesc", "constructionBullet", "fabricContentBullet", "specs", "Capacity", "Dimensions", "whyWeLoveItDesc", "pageParam", "isLowInventoryAll", "isLowInventorySale", "isLowInventoryFull") %>% 
+    mutate_all(~ifelse(str_detect(., ":"), str_extract(., "(?<=:).*"), .)) %>%   # Removing everything before the colon as there are sometimes unnessesary tags
+    mutate_all(~str_replace(., "^\"", "")) %>%
+    mutate_at(vars(href, shortDesc, sellingDesc, Capacity, Dimensions, pageParam, isLowInventoryAll, isLowInventorySale, isLowInventoryFull),
+              ~str_replace(., "\\[\".*", "\"\"")) %>% 
+    mutate(AgeStart = str_c(str_extract_all(specs, "\\d+"), collapse = "")) %>% 
+    tidyr::separate(Dimensions, into = c("Height", "Width", "Depth"), sep = 'x', extra = "drop", fill = "right") %>%
+    mutate(Height = str_replace(Height, '"H', ''),
+           Width = str_replace(Width, '"W":', ''),
+           Depth = str_replace(Depth, '"D":', ''),
+           Height = str_replace_all(Height, "[^0-9.]", ""),
+           Width = str_replace_all(Width, "[^0-9.]", ""),
+           Depth = str_replace_all(Depth, "[^0-9.]", ""),
+           Height = str_replace(Height, "\\.$", ""),
+           Width = str_replace(Width, "\\.$", ""),
+           Depth = str_replace(Depth, "\\.$", "")
+    ) %>% 
+    select(-specs) %>% 
+    mutate(InfoProductPage$AdditionalFeatures1) %>% 
+    tidyr::separate(`InfoProductPage$AdditionalFeatures1`, into = paste0("AdditionalFeatures", 1:15), sep = "\\.|,|;", extra = "drop", fill = "right") %>% 
+    rename_with(~{
+      stem <- sub("(\\d+)$", "", .x)
+      suffix <- seq_along(.)
+      paste0(stem, suffix)
+    }, starts_with("AdditionalFeatures")) %>% 
+    unite(AdditionalFeatures, starts_with("AdditionalFeatures"), sep = ";", na.rm = TRUE) %>%  # May want to change this but it unifies all additional features
+    mutate(Liters = shortDesc) %>% 
+    tidyr::separate(Liters, into = c("Delete","Liters"), sep = ',', fill = "right") %>% 
+    select(-Delete) %>% 
+    mutate(Images = ImageString)
+  
+    
+  
+  CorrectNames <- WithTagsProductPage %>%
+    rename(
+      ProductName = shortDesc,
+      ProductLink = href,
+      ProductDetails = sellingDesc,
+      AdditionalFeatures = AdditionalFeatures,
+      Construction = constructionBullet,
+      FabricAndCare = fabricContentBullet,
+      WhyWeLoveIt = whyWeLoveItDesc,
+      Age = AgeStart,
+      Height = Height,
+      Width = Width,
+      Depth = Depth,
+      Capacity = Capacity,
+      # Images1 = col15,
+      # Images2 = col16,
+      # Images3 = col17,
+      # Images4 = col18,
+      # Images5 = col19,
+      # Lowest_Price = col20,
+      Liters = Liters
+    ) %>%
+    mutate(ProductName = str_remove_all(ProductName, '"')) %>%
+    # mutate(Image = str_extract(Image, "(?<=<br>).*")) %>%
+    mutate(Construction = str_remove_all(Construction, '[\\["\\]]')) %>%
+    mutate(FabricAndCare = str_remove_all(FabricAndCare, "[\\[\\]{}\"']"))
+  
+
+  
+  
+    }, error = function(e) {
+      print(paste0("Error with URL: ", Product))
+      message("An error occurred:", conditionMessage(e))
+      return()
+    })
+  
+  
+  merged_df <- inner_join(BasicWithTags, CorrectNames, by = "ProductName")
+  
+  ForExport <- bind_rows(merged_df, ForExport)
+  
       
-      
-    WithTagsProductPage <- WithTagsProductPage %>%  
-      `colnames<-`(gsub("\"", "", colnames(WithTagsProductPage))) %>%  # At this point you should have all of the useful information split into their own distinct columns
-      select("href","shortDesc", "sellingDesc", "constructionBullet", "fabricContentBullet", "specs", "Capacity", "Dimensions", "whyWeLoveItDesc", "pageParam", "isLowInventoryAll", "isLowInventorySale", "isLowInventoryFull", "text") %>% 
-      mutate_all(~ifelse(str_detect(., ":"), str_extract(., "(?<=:).*"), .)) %>%   # Removing everything before the colon as there are sometimes unnessesary tags
-      mutate_all(~str_replace(., "^\"", "")) %>%
-      mutate_at(vars(href, shortDesc, sellingDesc, Capacity, Dimensions, pageParam, isLowInventoryAll, isLowInventorySale, isLowInventoryFull, text),
-                ~str_replace(., "\\[\".*", "\"\"")) %>% 
-      mutate(AgeStart = str_c(str_extract_all(specs, "\\d+"), collapse = "")) %>% 
-      tidyr::separate(Dimensions, into = c("Height", "Width", "Depth"), sep = 'x', extra = "drop", fill = "right") %>%
-      mutate(Height = str_replace(Height, '"H', ''),
-             Width = str_replace(Width, '"W":', ''),
-             Depth = str_replace(Depth, '"D":', ''),
-        Height = str_replace_all(Height, "[^0-9.]", ""),
-        Width = str_replace_all(Width, "[^0-9.]", ""),
-        Depth = str_replace_all(Depth, "[^0-9.]", ""),
-        Height = str_replace(Height, "\\.$", ""),
-        Width = str_replace(Width, "\\.$", ""),
-        Depth = str_replace(Depth, "\\.$", "")
-      ) %>% 
-      select(-specs) %>% 
-      mutate(InfoProductPage$AdditionalFeatures1) %>% 
-      tidyr::separate(`InfoProductPage$AdditionalFeatures1`, into = paste0("AdditionalFeatures", 1:15), sep = "\\.|,|;", extra = "drop", fill = "right") %>%
-      select(where(function(x) any(x !=""))) %>%
-      rename_with(~{
-        stem <- sub("(\\d+)$", "", .x)
-        suffix <- seq_along(.)
-        paste0(stem, suffix)
-      }, starts_with("AdditionalFeatures"))
-    
-      
-    
-    CorrectNames <- WithTagsProductPage %>%
-      rename(
-        ProductName = shortDesc,
-        ProductLink = href,
-        ProductDetails = sellingDesc,
-        # AdditionalFeatures = col6,
-        Construction = constructionBullet,
-        FabricAndCare = fabricContentBullet,
-        WhyWeLoveIt = whyWeLoveItDesc,
-        Age = AgeStart,
-        Height = Height,
-        Width = Width,
-        Depth = Depth,
-        Capacity = Capacity,
-        # Images1 = col15,
-        # Images2 = col16,
-        # Images3 = col17,
-        # Images4 = col18,
-        # Images5 = col19,
-        # Lowest_Price = col20,
-        # Liters = col21
-      )
-    
-    
-    merged_df <- inner_join(BasicWithTags, ProductInfo, by = "ProductLink")
-    
-    ForExport <- bind_rows(merged_df, ForExport)
     
   }
   
@@ -186,12 +230,12 @@ ExtractProductInformationProd <- function(URL_Of_Category) {
 
 
 URL <- "https://www.llbean.com/llb/shop/818?page=school-backpacks&csp=f&bc=50-816&start=1&viewCount=48&nav=ln-816"
-BackpackInformation <- ExtractProductInformationProd(URL)
+BackpackInformation2 <- ExtractProductInformationProd(URL)
 # write.xlsx(BackpackInformation, "BackpackInformationJune7_Morning.xlsx", rowNames = FALSE)
 
-
-URL = "https://www.llbean.com/llb/shop/516672?page=bags-and-totes&bc=50&csp=f&nav=gnro-594" # Largely works, some columns off
-Totes <- ExtractProductInformation(URL)
-
-URL <- "https://www.llbean.com/llb/shop/816?page=school-backpacks&csp=f&bc=50&sort_field=relevance&start=1&viewCount=75"
-SchoolBackpacksAndLunchBoxes <- ExtractProductInformation(URL)
+# 
+# URL = "https://www.llbean.com/llb/shop/516672?page=bags-and-totes&bc=50&csp=f&nav=gnro-594" # Largely works, some columns off
+# Totes <- ExtractProductInformation(URL)
+# 
+# URL <- "https://www.llbean.com/llb/shop/816?page=school-backpacks&csp=f&bc=50&sort_field=relevance&start=1&viewCount=75"
+# SchoolBackpacksAndLunchBoxes <- ExtractProductInformation(URL)
