@@ -46,7 +46,11 @@ ExtractProductInformationProd <- function(URL_Of_Category) {
     ) %>% 
     mutate_all(~str_remove_all(., "\"")) %>% 
     rename_all(~str_remove_all(., "\"")) %>% 
-    mutate(ProductLink = paste0("https://www.llbean.com/llb/shop/",pageID_s,"?page=", page_pageParamValue_s))
+    mutate(ProductLink = paste0("https://www.llbean.com/llb/shop/",pageID_s,"?page=", page_pageParamValue_s)) %>% 
+    rename(
+      Price = minFullPrice_f,
+      Sale = minSalePrice_f,
+    )
   
   # Up until this point has been collecting all the information given to us on the category screen. Now I will dig into the individual products.
   
@@ -102,7 +106,6 @@ ExtractProductInformationProd <- function(URL_Of_Category) {
       tidyr::separate(entity, into = paste0("col", 1:400), sep = ',"', extra = "drop", fill = "right") %>%
       tidyr::separate(AdditionalFeatures, into = paste0("AdditionalFeatures", 1:10), sep = '","', extra = "drop", fill = "right") %>%
       select(-where(~ all(is.na(.) | . == "")))
-
     
     # Each cell in BasicInfo contains the information for the products on the category page and is identified with a tag such as `minFullPrice_f` that describes what is in the cell
     # The following statement breaks up the scraped information to split by the ID. They are out of order so more involved than just selecting specific columns
@@ -111,7 +114,7 @@ ExtractProductInformationProd <- function(URL_Of_Category) {
       gather(key, value, -id) %>%  # convert data to long format
       separate(value, into = c("key", "value"), sep = ":", extra = "merge")  %>%  # split keys and values
       pivot_wider(names_from = key, values_from = value, values_fn = list(value = function(x) paste(x, collapse = "; ")))  # concatenate values
-      # select(-where(~any(. == ""))) %>%
+      
       
     WithTagsProductPage <- WithTagsProductPage %>%  
       `colnames<-`(gsub("\"", "", colnames(WithTagsProductPage))) %>%  # At this point you should have all of the useful information split into their own distinct columns
@@ -121,24 +124,43 @@ ExtractProductInformationProd <- function(URL_Of_Category) {
       mutate_at(vars(href, shortDesc, sellingDesc, Capacity, Dimensions, pageParam, isLowInventoryAll, isLowInventorySale, isLowInventoryFull, text),
                 ~str_replace(., "\\[\".*", "\"\"")) %>% 
       mutate(AgeStart = str_c(str_extract_all(specs, "\\d+"), collapse = "")) %>% 
-      select(-specs)
+      tidyr::separate(Dimensions, into = c("Height", "Width", "Depth"), sep = 'x', extra = "drop", fill = "right") %>%
+      mutate(Height = str_replace(Height, '"H', ''),
+             Width = str_replace(Width, '"W":', ''),
+             Depth = str_replace(Depth, '"D":', ''),
+        Height = str_replace_all(Height, "[^0-9.]", ""),
+        Width = str_replace_all(Width, "[^0-9.]", ""),
+        Depth = str_replace_all(Depth, "[^0-9.]", ""),
+        Height = str_replace(Height, "\\.$", ""),
+        Width = str_replace(Width, "\\.$", ""),
+        Depth = str_replace(Depth, "\\.$", "")
+      ) %>% 
+      select(-specs) %>% 
+      mutate(InfoProductPage$AdditionalFeatures1) %>% 
+      tidyr::separate(`InfoProductPage$AdditionalFeatures1`, into = paste0("AdditionalFeatures", 1:15), sep = "\\.|,|;", extra = "drop", fill = "right") %>%
+      select(where(function(x) any(x !=""))) %>%
+      rename_with(~{
+        stem <- sub("(\\d+)$", "", .x)
+        suffix <- seq_along(.)
+        paste0(stem, suffix)
+      }, starts_with("AdditionalFeatures"))
+    
+      
     
     CorrectNames <- WithTagsProductPage %>%
       rename(
         ProductName = shortDesc,
-        # Price = col2,
-        # Sale = col3,
         ProductLink = href,
         ProductDetails = sellingDesc,
         # AdditionalFeatures = col6,
         Construction = constructionBullet,
-        # FabricAndCare = col8,
+        FabricAndCare = fabricContentBullet,
         WhyWeLoveIt = whyWeLoveItDesc,
         Age = AgeStart,
-        # Height = col11,
-        # Width = col12,
-        # Depth = col13,
-        # Capacity = col14,
+        Height = Height,
+        Width = Width,
+        Depth = Depth,
+        Capacity = Capacity,
         # Images1 = col15,
         # Images2 = col16,
         # Images3 = col17,
