@@ -1,4 +1,4 @@
-Key = "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"
+Key = ""
 import openai
 import json
 
