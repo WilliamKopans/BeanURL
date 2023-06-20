@@ -22,19 +22,22 @@ def print_data(data):
     print(df)
 
 def AccessAPI(endpoint='info', itemid='513717'):
+    pd.set_option('display.max_rows', None)
+    pd.set_option('display.max_columns', None)
     if (endpoint == 'info'):
         endpoint = ''
     else:
         endpoint = '/' + endpoint
 
     url = f'https://api.llbean.com/v1/product/info{endpoint}?itemid={itemid}'
-    api_key = '2Fz'
+    api_key = 'No'
     headers = {'key': api_key}
     print(url)
 
     raw_data = make_api_call(url, headers)
 
     if raw_data is not None:
+
         print(raw_data)
         return raw_data
     else:
@@ -58,7 +61,11 @@ def flatten_dict(d, parent_key='', sep='_'):
                     elif 'text' in item:
                         for j, text in enumerate(item['text']):
                             items.append((f"{category}_{j}", text))
-            elif k in ['swatches', 'skuMap']:
+            elif k == 'swatches':
+                for i, item in enumerate(v):
+                    color_key = f"color_{item['colorIndex']}_{item['color']}"
+                    items.append((color_key, item['swatchUrl']))
+            elif k == 'skuMap':
                 color_info = []
                 for i, item in enumerate(v):
                     if isinstance(item, MutableMapping):
@@ -79,6 +86,7 @@ def flatten_dict(d, parent_key='', sep='_'):
 
 
 
+
 def process_data(data):
     flat_data = {k: flatten_dict(v) for k, v in data.items()}
     df = pd.json_normalize(flat_data)
@@ -93,11 +101,19 @@ def main(itemid='507646'):
     for endpoint in endpoints:
         endpoint_data = AccessAPI(endpoint=endpoint, itemid=itemid)
         sleep(1)
+        if endpoint == 'personalization' and not endpoint_data['properties']:
+            continue  # Skip over the personalization endpoint if it is empty
         flattened_data = flatten_dict(endpoint_data)
-        df = pd.json_normalize(flattened_data)
+        if endpoint == 'swatchesFIX':
+            color_swatches = {key: [value] for key, value in flattened_data.items() if key.startswith('color_')}
+            df = pd.DataFrame(color_swatches)
+        else:
+            df = pd.json_normalize(flattened_data)
         AllData.append(df)
     AllData = pd.concat(AllData, axis=1)
     return AllData
+
+
 
 
 
