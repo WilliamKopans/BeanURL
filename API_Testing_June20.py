@@ -2,6 +2,7 @@ from time import sleep
 import numpy as np
 import requests
 import pandas as pd
+from collections.abc import MutableMapping
 
 def make_api_call(url, headers):
     response = requests.get(url, headers=headers)
@@ -27,7 +28,7 @@ def AccessAPI(endpoint='info', itemid='513717'):
         endpoint = '/' + endpoint
 
     url = f'https://api.llbean.com/v1/product/info{endpoint}?itemid={itemid}'
-    api_key = 'No'
+    api_key = '2Fz'
     headers = {'key': api_key}
     print(url)
 
@@ -40,38 +41,6 @@ def AccessAPI(endpoint='info', itemid='513717'):
         print("Failed to retrieve data")
 
 
-# def process_data(data):
-#     # Extract necessary information
-#     item_id = data.get('info', {}).get('properties', {}).get('itemid')
-#     description = data.get('info', {}).get('properties', {}).get('desc')
-#     links = data.get('info', {}).get('properties', {}).get('links', [])
-#     item_link = next((link['link'] for link in links if link.get('title') == 'weburl'), None)
-#     image_link = next((link['link'] for link in links if link.get('title') == 'defaultImgUrl'), None)
-#     price = data.get('attributes', {}).get('properties', {}).get('fullRetailPrice')
-#     inventory = data.get('inventory', {}).get('properties', {}).get('glance', {}).get('retailOnHand')
-#     swatches = data.get('attributes', {}).get('properties', {}).get('swatches', [])
-#     colors = [swatch['color'] for swatch in swatches]
-#     colors_available = len(colors)
-#
-#     # Create dataframe
-#     df = pd.DataFrame({
-#         'Item ID': [item_id],
-#         'Description': [description],
-#         'Item Link': [item_link],
-#         'Image Link': [image_link],
-#         'Price': [price],
-#         'Inventory': [inventory],
-#         'Colors Available': [colors_available],
-#         'Colors': [', '.join(colors) if colors else None],
-#     })
-#
-#     print(df)
-#     # Write dataframe to Excel
-#     # df.to_excel('BeanJune20.xlsx', index=False, engine='openpyxl')
-
-import pandas as pd
-from collections.abc import MutableMapping
-
 def flatten_dict(d, parent_key='', sep='_'):
     items = []
     for k, v in d.items():
@@ -79,7 +48,7 @@ def flatten_dict(d, parent_key='', sep='_'):
         if isinstance(v, MutableMapping):
             items.extend(flatten_dict(v, new_key, sep=sep).items())
         elif isinstance(v, list):
-            if k == 'copy':  # specific handling for 'copy' field
+            if k == 'copy':
                 for i, item in enumerate(v):
                     category = item['category']
                     if 'items' in item:
@@ -89,6 +58,12 @@ def flatten_dict(d, parent_key='', sep='_'):
                     elif 'text' in item:
                         for j, text in enumerate(item['text']):
                             items.append((f"{category}_{j}", text))
+            elif k in ['swatches', 'skuMap']:
+                color_info = []
+                for i, item in enumerate(v):
+                    if isinstance(item, MutableMapping):
+                        color_info.append(', '.join([f"{key}: {value}" for key, value in flatten_dict(item, f"{new_key}_{i}", sep=sep).items()]))
+                items.append((k, color_info))
             else:
                 for i, item in enumerate(v):
                     if isinstance(item, MutableMapping):
@@ -101,6 +76,9 @@ def flatten_dict(d, parent_key='', sep='_'):
 
 
 
+
+
+
 def process_data(data):
     flat_data = {k: flatten_dict(v) for k, v in data.items()}
     df = pd.json_normalize(flat_data)
@@ -109,17 +87,19 @@ def process_data(data):
 
 
 
-
-
-
 def main(itemid='507646'):
     endpoints = ['info', 'attributes', 'inventory', 'personalization', 'swatches']
-    AllData = {}
+    AllData = []
     for endpoint in endpoints:
-        AllData[endpoint] = AccessAPI(endpoint=endpoint, itemid=itemid)
+        endpoint_data = AccessAPI(endpoint=endpoint, itemid=itemid)
         sleep(1)
-    AllData = process_data(AllData)
+        flattened_data = flatten_dict(endpoint_data)
+        df = pd.json_normalize(flattened_data)
+        AllData.append(df)
+    AllData = pd.concat(AllData, axis=1)
     return AllData
+
+
 
 if __name__ == '__main__':
     data = main(itemid=518196)
