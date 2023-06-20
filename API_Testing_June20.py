@@ -1,5 +1,4 @@
 from time import sleep
-
 import requests
 import pandas as pd
 
@@ -20,43 +19,30 @@ def print_data(data):
     df = pd.DataFrame(data)
     print(df)
 
-def extract_data(raw_data):
-    itemid = raw_data['properties']['itemid']
-    desc = raw_data['properties']['desc']
-    link = [link['link'] for link in raw_data['links'] if 'link' in link][0]
+def AccessAPI(endpoint='info', itemid='513717'):
+    if (endpoint == 'info'):
+        endpoint = ''
+    else:
+        endpoint = '/' + endpoint
 
-    return {
-        'itemid': itemid,
-        'desc': desc,
-        'link': link
-    }
-
-def main(endpoint='info', itemid='513717'):
-    url = f'https://api.llbean.com/v1/product/info/{endpoint}?itemid={itemid}'
-    # url = 'https://api.llbean.com/v1/product/info?itemid=513717'
-    api_key = 'FILL'
+    url = f'https://api.llbean.com/v1/product/info{endpoint}?itemid={itemid}'
+    api_key =
     headers = {'key': api_key}
+    print(url)
 
     raw_data = make_api_call(url, headers)
 
     if raw_data is not None:
-        data = extract_data(raw_data)
-        pd.set_option('display.max_columns', None)  # or a large number like 1000
-        pd.set_option('display.max_rows', None)  # or a large number like 1000
-        pd.set_option('display.max_colwidth', None)  # or a large number like -1
-        pd.set_option('display.width', None)  # or a large number like 2000
-
-        print_data([data])  # Wrap data with a list to make it compatible with DataFrame
-        # to_csv([data], 'Bean20Data.csv')
+        print(raw_data)
     else:
         print("Failed to retrieve data")
 
 
+def main(itemid='507646'):
+    endpoints = ['info', 'attributes', 'inventory', 'personalization', 'swatches']
+    for endpoint in endpoints:
+        AccessAPI(endpoint=endpoint, itemid=itemid)
+        sleep(1)
+
 if __name__ == '__main__':
-    # main(endpoint='info', itemid='507646')
-    main(endpoint='attributes', itemid='507646')
-    # sleep(1)
-    # main(endpoint='inventory', itemid='507646')
-    # main(endpoint='personalization', itemid='507646')
-    # sleep(1)
-    # main(endpoint='swatches', itemid='507646')
+    main()
