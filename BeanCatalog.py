@@ -1,8 +1,7 @@
 # pdf_file_path = "/Users/williamkopans/Downloads/LLB_HH23-BestofSummer-REL.pdf"
 # pdf_file_path = "/Users/williamkopans/Downloads/LLB_AD23-SummerProspect-REL.pdf"
-# pdf_file_path = "/Users/williamkopans/Downloads/LLB_KH23-FlyFishing-REL.pdf"
-pdf_file_path = "/Users/williamkopans/Downloads/LLB_KE23-SpringOutdoor-REL.pdf"
-
+pdf_file_path = "/Users/williamkopans/Downloads/LLB_KH23-FlyFishing-REL.pdf"
+# pdf_file_path = "/Users/williamkopans/Downloads/LLB_KE23-SpringOutdoor-REL.pdf"
 
 
 
@@ -82,11 +81,27 @@ with open(pdf_file_path, 'rb') as file:
 
         # Create a function to estimate catalog page from pdf page number
         def estimate_catalog_page(pdf_page, coeff):
-            return int(round(coeff[0] * pdf_page + coeff[1]))
+            estimate = int(round(coeff[0] * pdf_page + coeff[1]))
+            if estimate < 0:
+                return "Invalid Page Number"
+            else:
+                return estimate
 
         # Generate the estimated catalog page numbers for all pdf pages
         for i in range(1, num_pages + 1):
-            print(f"PDF Page # {i} is Catalog Page # {estimate_catalog_page(i, coeff)}")
+            catalog_page = estimate_catalog_page(i, coeff)
+            if catalog_page != "Invalid Page Number":
+                print(f"PDF Page # {i} is Catalog Page # {catalog_page}")
+
+        # Check the conditions for low confidence
+        if len(page_numbers_np) < 6 and not 1.75 <= slope <= 2.25:
+            print("Low Confidence")
+            print(f"Number of page pairs: {len(page_numbers_np)}")
+            print(f"Slope: {slope}")
+        if len(page_numbers_np) < 12 and not 1.5 <= slope <= 2.5:
+            print("Low Confidence")
+            print(f"Number of page pairs: {len(page_numbers_np)}")
+            print(f"Slope: {slope}")
 
     else:
         print(f"The PDF has less than 5 pages. It has {num_pages} pages.")
