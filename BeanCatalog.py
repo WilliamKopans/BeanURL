@@ -1,13 +1,14 @@
 # pdf_file_path = "/Users/williamkopans/Downloads/LLB_HH23-BestofSummer-REL.pdf"
 # pdf_file_path = "/Users/williamkopans/Downloads/LLB_AD23-SummerProspect-REL.pdf"
-pdf_file_path = "/Users/williamkopans/Downloads/LLB_KH23-FlyFishing-REL.pdf"
-# pdf_file_path = "/Users/williamkopans/Downloads/LLB_KE23-SpringOutdoor-REL.pdf"
+# pdf_file_path = "/Users/williamkopans/Downloads/LLB_KH23-FlyFishing-REL.pdf"
+pdf_file_path = "/Users/williamkopans/Downloads/LLB_KE23-SpringOutdoor-REL.pdf"
 
 
 import re
 import numpy as np
 from PyPDF2 import PdfReader
 from scipy import stats
+import matplotlib.pyplot as plt
 
 
 with open(pdf_file_path, 'rb') as file:
@@ -35,6 +36,11 @@ with open(pdf_file_path, 'rb') as file:
 
         page_numbers_np = np.array(page_numbers)
         page_numbers_np = page_numbers_np[page_numbers_np[:,1] <= num_pages * 2]
+
+        # Plot the page number pairings with a trend line
+        plt.scatter(page_numbers_np[:,0], page_numbers_np[:,1])
+        plt.plot(page_numbers_np[:,0], np.poly1d(np.polyfit(page_numbers_np[:,0], page_numbers_np[:,1], 1))(page_numbers_np[:,0]))
+        plt.show()
 
         pdf_pages = page_numbers_np[:,0].astype(int)
         catalog_pages = page_numbers_np[:,1].astype(int)
@@ -80,3 +86,9 @@ with open(pdf_file_path, 'rb') as file:
 
     else:
         print(f"The PDF has less than 5 pages. It has {num_pages} pages.")
+
+
+print(pdf_file_path)
+
+# Ask user to enter a string
+input_string = input("Enter a string: ")
