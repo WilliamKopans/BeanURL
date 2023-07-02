@@ -8,6 +8,8 @@ from PyPDF2 import PdfReader
 import numpy as np
 from statsmodels.stats.outliers_influence import OLSInfluence
 
+# Compiled regular expression pattern
+pattern = re.compile("Be an Outsider")
 
 def extract_text_from_pdf(file_path):
     # Compiled regular expression pattern
@@ -18,29 +20,25 @@ def extract_text_from_pdf(file_path):
         pdf_reader = PdfReader(file)
         num_pages = len(pdf_reader.pages)
 
-        for i in range(num_pages):
-            page = pdf_reader.pages[i]
+        for i, page in enumerate(pdf_reader.pages):
             page_content = page.extract_text()
 
-            page_content = "\n".join([line for line in page_content.split("\n") if pattern.search(line)])
-            page_content = pattern.sub('', page_content)
-            page_content = page_content[:page_content.rfind("·")]
-            page_content = page_content.replace("See more colors at llbean.com", "")
-            page_content = page_content.replace("·", "")
+            lines = [line for line in page_content.split("\n") if pattern.search(line)]
+            page_content = pattern.sub('', "\n".join(lines))
             page_content = page_content[:page_content.rfind(" ")]
             if len(re.findall("\d{2,}", page_content)) > 1:
                 page_content = page_content[:page_content.rfind(" ")]
             page_content = re.sub('[^0-9]', '', page_content)
 
-            if page_content.isdigit() and int(page_content) < int(len(pdf_reader.pages) * 2 + 2):
+            if page_content.isdigit() and int(page_content) < int(num_pages * 2 + 2):
                 page_numbers.append((i + 1, int(page_content)))
 
     return page_numbers
 
-
 def perform_linear_regression(page_numbers):
-    x = np.array([pair[0] for pair in page_numbers])
-    y = np.array([pair[1] for pair in page_numbers])
+    pairs = np.array(page_numbers)
+    x = pairs[:, 0]
+    y = pairs[:, 1]
 
     model = np.polyfit(x, y, 1)
     slope = model[0]
@@ -60,20 +58,20 @@ def perform_linear_regression(page_numbers):
 
     return list(zip(x, y))
 
-
 def predict_page_numbers(num_pages):
+
     pages_with_numbers = extract_text_from_pdf(pdf_file_path)
     filtered_page_numbers = perform_linear_regression(pages_with_numbers)
 
     slope, intercept = np.polyfit(np.array(filtered_page_numbers)[:, 0], np.array(filtered_page_numbers)[:, 1], 1)
-    page_numbers = []
+    page_numbers = {}
     for i in range(1, num_pages + 2):
         if slope * i + intercept <= 0:
             continue
 
         page_number = round(abs(slope * i + intercept))
-        page_numbers.append((i, page_number))
-        page_numbers.append((i, page_number + 1))
+        page_numbers[page_number] = i
+        page_numbers[page_number + 1] = i
 
     return page_numbers
 
